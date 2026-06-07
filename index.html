@@ -61,12 +61,17 @@
       user-select: none;
     }
     .cutout-hero { object-fit: contain; filter: drop-shadow(0 16px 32px rgba(0,0,0,0.12)); }
-    .brand-logo { width: 2.25rem; height: 2.25rem; border-radius: 9999px; object-fit: cover; flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.2); }
-    .brand-logo.on-light { border-color: rgba(0,0,0,0.08); }
-    .ip-float { position: absolute; pointer-events: none; user-select: none; z-index: 15; object-fit: contain; object-position: bottom center; background: transparent; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.12)); }
+    .brand-logo-wrap { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 9999px; background: rgba(255,255,255,0.96); flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); overflow: hidden; }
+    .brand-logo { width: 2rem; height: 2rem; object-fit: contain; object-position: center bottom; background: transparent; }
+    .ip-float { position: absolute; pointer-events: none; user-select: none; z-index: 25; object-fit: contain; object-position: bottom center; background: transparent !important; opacity: 0; transition: opacity .12s ease; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.12)); }
+    .ip-float.ip-ready { opacity: 1; }
+    .ip-modal-img { background: transparent !important; opacity: 0; transition: opacity .12s ease; }
+    .ip-modal-img.ip-ready { opacity: 1; }
+    #screen-food .page-scroll-tall { overflow: visible; }
+    .dish-review-stage { position: relative; padding-bottom: 5rem; margin-bottom: 0.5rem; overflow: visible; isolation: isolate; }
     .ip-cocktail { right: -0.25rem; top: -5.5rem; height: 7.5rem; width: auto; max-width: 44%; }
     .ip-food-tray { right: -0.5rem; top: -1.5rem; height: 7rem; width: auto; max-width: 40%; }
-    .ip-dish-review { right: -0.75rem; bottom: -1rem; height: 7.5rem; width: auto; max-width: 42%; }
+    .ip-dish-review { right: -0.75rem; bottom: 0.75rem; height: 10.5rem; width: auto; max-width: 42%; z-index: 40; transform: none; filter: drop-shadow(0 12px 24px rgba(0,0,0,0.15)) drop-shadow(0 0 10px rgba(255,255,255,0.4)); }
     .ip-party-share { right: -1rem; bottom: -0.5rem; height: 9rem; width: auto; max-width: 44%; }
     .ip-bars-map { right: 0; top: -0.5rem; height: 7rem; width: auto; max-width: 48%; }
   </style>
@@ -78,7 +83,7 @@
   <!-- 顶部导航 -->
   <header id="appHeader" class="sticky top-0 z-50 flex justify-between items-center px-5 py-4 bg-black/95 backdrop-blur border-b border-white/5">
     <button type="button" id="headerLeftBtn" class="text-white/70 hover:text-white flex items-center" onclick="handleBack()">
-      <img id="brandLogo" src="" alt="灵瑞" class="brand-logo" />
+      <span class="brand-logo-wrap"><img id="brandLogo" src="" alt="灵瑞" class="brand-logo" /></span>
       <span class="material-symbols-outlined text-2xl ml-1 hidden" id="headerLeftIcon">arrow_back</span>
     </button>
     <h1 class="sr-only" id="headerTitle" aria-hidden="true"></h1>
@@ -269,8 +274,8 @@
       <div class="flex gap-2 mb-5" id="tierTabs"></div>
       <div id="dishList" class="space-y-3 mb-6"></div>
 
-      <div class="relative mt-2">
-        <div class="bg-black rounded-[20px] p-5 pr-24 relative z-0">
+      <div class="dish-review-stage">
+        <div class="bg-black rounded-[20px] p-5 relative z-10">
           <p class="font-serif text-white text-base mb-3">我想吃这道菜</p>
           <input class="w-full bg-neutral-900 border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/30 mb-3 focus:outline-none focus:border-brand-red/50" id="customDish" placeholder="麻辣小龙虾" value="麻辣小龙虾" />
           <button type="button" onclick="analyzeDish()" class="w-full bg-brand-red text-white py-3 rounded-full font-sans text-sm font-semibold">看看搭配怎么样</button>
@@ -381,7 +386,7 @@
 
   <div id="ipModalOverlay" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/65 backdrop-blur-sm" onclick="if(event.target===this)closeIpModal()">
     <div class="bg-white rounded-3xl p-6 max-w-[300px] w-full text-center shadow-2xl">
-      <img id="ipModalImg" src="" alt="" class="h-32 mx-auto mb-4 object-contain" />
+      <img id="ipModalImg" src="" alt="灵瑞" class="ip-modal-img h-36 w-auto max-w-full mx-auto mb-4 object-contain" />
       <p id="ipModalTitle" class="font-serif text-lg font-semibold text-black mb-2"></p>
       <p id="ipModalMessage" class="text-sm text-neutral-600 leading-relaxed mb-5"></p>
       <button type="button" onclick="closeIpModal()" class="w-full bg-brand-red text-white py-3 rounded-full text-sm font-semibold">知道了</button>
@@ -391,6 +396,18 @@
 
 <script src="config.js"></script>
 <script>
+(function injectIpPreloads() {
+  const parts = location.pathname.split('/').filter(p => p && !/\.html?$/i.test(p));
+  const base = parts.length >= 1 ? '/' + parts[0] + '/assets/' : 'assets/';
+  ['ip-wine-guide.png','ip-cocktail-shake.png','ip-food-tray.png','ip-dish-review.png','ip-party-share.png','ip-bars-map.png','ip-error-timeout.png','ip-age-warning.png','ip-avatar-logo.png'].forEach(name => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = base + name;
+    document.head.appendChild(link);
+  });
+})();
+
 let IMG_BASE = 'assets/';
 let IMG = {};
 let COCKTAIL_HERO = {};
@@ -818,8 +835,19 @@ async function ensureImageGenReady() {
     await resolveApiBase();
     const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(6000) });
     const data = await res.json();
-    imageGenAvailable = !!(data.imageGenAvailable);
     apiOnline = res.ok && data.ok;
+    if (data.imageGenAvailable || data.imageModel) {
+      imageGenAvailable = true;
+      return true;
+    }
+    const probe = await fetch(`${API_BASE}/api/generate-image`, {
+      method: 'OPTIONS',
+      signal: fetchTimeout(4000)
+    }).catch(() => null);
+    if (probe && probe.status !== 404) {
+      imageGenAvailable = true;
+      return true;
+    }
   } catch {}
   return imageGenAvailable;
 }
@@ -861,7 +889,10 @@ async function generateCocktailImageOnly() {
 async function generateDishImagesAsync() {
   if (dishImagesGenerating || !sessionData?.tiers || !sessionData?.aiRecognized) return;
   const ready = await ensureImageGenReady();
-  if (!ready) return;
+  if (!ready) {
+    console.warn('生图 API 未就绪，跳过下酒菜效果图');
+    return;
+  }
   const pending = [];
   for (const tier of Object.values(sessionData.tiers)) {
     for (const dish of tier.dishes || []) {
@@ -873,7 +904,7 @@ async function generateDishImagesAsync() {
   if (!pending.length) return;
   dishImagesGenerating = true;
   if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
-  for (const dish of pending) {
+  async function genOne(dish) {
     dish._imageGenerating = true;
     if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
     try {
@@ -889,6 +920,14 @@ async function generateDishImagesAsync() {
     dish._imageGenerating = false;
     if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
   }
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(2, pending.length) }, async () => {
+    while (idx < pending.length) {
+      const i = idx++;
+      await genOne(pending[i]);
+    }
+  });
+  await Promise.all(workers);
   dishImagesGenerating = false;
 }
 
@@ -920,21 +959,23 @@ async function analyzeDishWithAI(dishName) {
 
 async function init() {
   buildImgConfig();
+  const ipPreload = preloadAllIpAssets();
+  initIpImages();
   const heroEl = document.getElementById('homeHeroImg');
   if (heroEl) {
     setLazyImg(heroEl, IMG.homeHero, true);
     heroEl.onerror = function() { imgFallback(this, '首页设计图.png'); };
   }
-  initIpImages();
   renderStepBar();
   renderSamples();
   document.getElementById('cameraInput').onchange = handleImageFile;
   document.getElementById('albumInput').onchange = handleImageFile;
   updateChrome('upload');
-  await checkApiHealth();
+  checkApiHealth().catch(() => {});
   scheduleApiKeepAlive();
   warmupApiIfNeeded().catch(() => {});
-  setTimeout(showAgeWarningOnce, 600);
+  await ipPreload;
+  showAgeWarningOnce();
 }
 
 function getSampleImage(id) {
@@ -972,53 +1013,68 @@ const DISH_IMAGES = {
 };
 
 function getDishAssetKey(name) {
-  if (DISH_IMAGES[name]) return DISH_IMAGES[name];
-  if (/花生|坚果/i.test(name)) return 'dishPeanuts';
-  if (/牛|牛肉|腱|扒|排/i.test(name)) return 'dishBeef';
-  return null;
+  return DISH_IMAGES[name] || null;
 }
 
 function showScannerPreview() {}
 
 const IP_BINDINGS = [
-  ['wineIpGuide', 'ipWineGuide', 'ip-wine-guide.jpg'],
-  ['ipCocktailShake', 'ipCocktailShake', 'ip-cocktail-shake.jpg'],
-  ['ipFoodTray', 'ipFoodTray', 'ip-food-tray.jpg'],
-  ['ipDishReview', 'ipDishReview', 'ip-dish-review.jpg'],
-  ['ipPartyShare', 'ipPartyShare', 'ip-party-share.jpg'],
-  ['ipBarsMap', 'ipBarsMap', 'ip-bars-map.jpg'],
-  ['brandLogo', 'ipAvatarLogo', 'ip-avatar-logo.jpg']
+  ['wineIpGuide', 'ipWineGuide'],
+  ['ipCocktailShake', 'ipCocktailShake'],
+  ['ipFoodTray', 'ipFoodTray'],
+  ['ipDishReview', 'ipDishReview'],
+  ['ipPartyShare', 'ipPartyShare'],
+  ['ipBarsMap', 'ipBarsMap'],
+  ['brandLogo', 'ipAvatarLogo']
 ];
+const ipCache = {};
 
-function setIpImg(el, src, jpgFallback, eager = false) {
+function preloadIpAsset(src) {
+  if (!src || ipCache[src]) return Promise.resolve(src);
+  return new Promise(resolve => {
+    const im = new Image();
+    im.onload = () => { ipCache[src] = true; resolve(src); };
+    im.onerror = () => resolve(src);
+    im.src = src;
+  });
+}
+
+function preloadAllIpAssets() {
+  const keys = ['ipWineGuide','ipCocktailShake','ipFoodTray','ipDishReview','ipPartyShare','ipBarsMap','ipErrorTimeout','ipAgeWarning','ipAvatarLogo'];
+  return Promise.all(keys.map(k => IMG[k] ? preloadIpAsset(IMG[k]) : Promise.resolve()));
+}
+
+function setIpImg(el, src) {
   if (!el || !src) return;
-  el.loading = eager ? 'eager' : 'lazy';
-  el.decoding = 'async';
-  el.dataset.fb = '';
-  el.onerror = function() {
-    if (this.dataset.fb !== '1' && jpgFallback) {
-      this.dataset.fb = '1';
-      this.src = jpgFallback;
-    }
-  };
-  el.src = src;
+  el.classList.remove('ip-ready');
+  el.removeAttribute('src');
+  el.loading = 'eager';
+  el.decoding = 'sync';
+  el.fetchPriority = 'high';
+  const reveal = () => el.classList.add('ip-ready');
+  if (ipCache[src]) {
+    el.src = src;
+    reveal();
+    return;
+  }
+  const im = new Image();
+  im.decoding = 'sync';
+  im.onload = () => { ipCache[src] = true; el.src = src; reveal(); };
+  im.onerror = () => { el.src = src; reveal(); };
+  im.src = src;
 }
 
 function initIpImages() {
-  IP_BINDINGS.forEach(([id, key, jpg]) => {
+  IP_BINDINGS.forEach(([id, key]) => {
     const el = document.getElementById(id);
-    if (el && IMG[key]) setIpImg(el, IMG[key], imgPath(jpg), id === 'brandLogo');
+    if (el && IMG[key]) setIpImg(el, IMG[key]);
   });
 }
 
 function showIpModal(type, title, message) {
-  const imgMap = {
-    error: [imgPath('ip-error-timeout.jpg'), IMG.ipErrorTimeout],
-    age: [imgPath('ip-age-warning.jpg'), IMG.ipAgeWarning]
-  };
-  const pair = imgMap[type] || imgMap.error;
+  const imgMap = { error: IMG.ipErrorTimeout, age: IMG.ipAgeWarning };
   const imgEl = document.getElementById('ipModalImg');
-  if (imgEl) setIpImg(imgEl, pair[0], pair[1], true);
+  if (imgEl) setIpImg(imgEl, imgMap[type] || IMG.ipErrorTimeout);
   document.getElementById('ipModalTitle').textContent = title;
   document.getElementById('ipModalMessage').textContent = message;
   document.getElementById('ipModalOverlay').classList.remove('hidden');
@@ -1046,7 +1102,6 @@ function updateChrome(screen) {
   document.getElementById('headerTitle').textContent = '';
   const logo = document.getElementById('brandLogo');
   const backIcon = document.getElementById('headerLeftIcon');
-  if (logo) logo.classList.toggle('on-light', !isDark);
   if (backIcon) backIcon.classList.toggle('hidden', screen === 'upload');
   document.getElementById('headerRightIcon').textContent = screen === 'upload' ? 'account_circle' : 'share';
   document.getElementById('headerLeftBtn').className = `flex items-center ${isDark ? 'text-white/70 hover:text-white' : 'text-black/50 hover:text-black'}`;
@@ -1184,6 +1239,7 @@ async function goToCocktail() {
   goTo('cocktail');
   if (sessionData?.aiRecognized && sessionData.cocktail) {
     generateAndApplyPlanImages();
+    generateDishImagesAsync();
   }
 }
 function goToFood() {
@@ -1363,12 +1419,12 @@ function renderDishes() {
     let thumb;
     if (d.imageUrl) {
       thumb = `<img src="${d.imageUrl}" alt="${d.name}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>🍽</span>'" />`;
-    } else if ((d._imageGenerating || dishImagesGenerating) && sessionData?.aiRecognized) {
-      thumb = '<div class="w-full h-full bg-neutral-200 animate-pulse flex items-center justify-center"><span class="text-[10px] text-neutral-400">绘制中</span></div>';
+    } else if (sessionData?.aiRecognized && (d._imageGenerating || dishImagesGenerating || imageGenAvailable)) {
+      thumb = '<div class="w-full h-full bg-neutral-200 animate-pulse flex items-center justify-center"><span class="text-[10px] text-neutral-400">AI绘制中</span></div>';
     } else {
       const imgKey = getDishAssetKey(d.name);
       thumb = imgKey && IMG[imgKey]
-        ? `<img src="${IMG[imgKey]}" alt="${d.name}" class="w-full h-full object-cover" onerror="imgFallback(this, '${imgKey === 'dishPeanuts' ? '酒鬼花生.png' : '卤切牛肉.png'}')" />`
+        ? `<img src="${IMG[imgKey]}" alt="${d.name}" class="w-full h-full object-cover" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>🍽</span>'" />`
         : '<span class="text-2xl">🍽</span>';
     }
     return `<div class="bg-white rounded-[20px] p-4 shadow-[0_4px_16px_rgba(0,0,0,0.06)] flex gap-3">
