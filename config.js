@@ -1,1 +1,1 @@
-window.JINLING_API = 'https://jinling-api.onrender.com';
+window.JINLING_API = 'https://llngruiz1hejiu.onrender.com';
