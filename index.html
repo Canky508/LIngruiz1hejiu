@@ -425,28 +425,28 @@ function setLazyImg(el, src, eager = false) {
 function buildImgConfig() {
   IMG_BASE = detectImgBase();
   IMG = {
-    party: imgPath('party-wine-cellar.png'),
-    cocktailAmber: imgPath('cocktail-amber-winter.png'),
+    party: imgPath('酒馆环境图4.png'),
+    cocktailAmber: imgPath('琥珀暖冬.png'),
     homeHero: imgPath('首页设计图.png'),
-    ipWineGuide: imgPath('ip-wine-guide.jpg'),
-    ipCocktailShake: imgPath('ip-cocktail-shake.jpg'),
-    ipFoodTray: imgPath('ip-food-tray.jpg'),
-    ipDishReview: imgPath('ip-dish-review.jpg'),
-    ipPartyShare: imgPath('ip-party-share.jpg'),
-    ipBarsMap: imgPath('ip-bars-map.jpg'),
-    ipErrorTimeout: imgPath('ip-error-timeout.jpg'),
-    ipAgeWarning: imgPath('ip-age-warning.jpg'),
-    ipAvatarLogo: imgPath('ip-avatar-logo.jpg'),
-    barWhiskyInterior: imgPath('bar-whisky.png'),
-    barBistroInterior: imgPath('bar-bistro.png'),
-    barLoungeInterior: imgPath('bar-lounge.jpg'),
+    ipWineGuide: imgPath('ip-wine-guide.png'),
+    ipCocktailShake: imgPath('ip-cocktail-shake.png'),
+    ipFoodTray: imgPath('ip-food-tray.png'),
+    ipDishReview: imgPath('ip-dish-review.png'),
+    ipPartyShare: imgPath('ip-party-share.png'),
+    ipBarsMap: imgPath('ip-bars-map.png'),
+    ipErrorTimeout: imgPath('ip-error-timeout.png'),
+    ipAgeWarning: imgPath('ip-age-warning.png'),
+    ipAvatarLogo: imgPath('ip-avatar-logo.png'),
+    barWhiskyInterior: imgPath('酒馆环境图1.png'),
+    barBistroInterior: imgPath('酒馆环境图2.png'),
+    barLoungeInterior: imgPath('酒馆环境图3.png'),
     barLoungeFallback: imgPath('bar-lounge.jpg'),
-    whisky: imgPath('sample-whisky.png'),
-    red: imgPath('sample-red.png'),
-    baijiu: imgPath('sample-baijiu.png'),
-    whiskyCutout: imgPath('sample-whisky.png'),
-    redCutout: imgPath('sample-red.png'),
-    baijiuCutout: imgPath('sample-baijiu.png'),
+    whisky: imgPath('麦卡伦.png'),
+    red: imgPath('红酒.png'),
+    baijiu: imgPath('白酒.png'),
+    whiskyCutout: imgPath('麦卡伦.png'),
+    redCutout: imgPath('红酒.png'),
+    baijiuCutout: imgPath('白酒.png'),
     dishPeanuts: imgPath('酒鬼花生.png'),
     dishBeef: imgPath('卤切牛肉.png')
   };
@@ -597,21 +597,21 @@ function getBars() {
       specialty: '单一麦芽威士忌吧',
       reason: '麦卡伦现货齐全，吧台氛围专业，懒得在家折腾就来这儿，靠谱。',
       interior: IMG.barWhiskyInterior,
-      imgFile: 'bar-whisky.png'
+      imgFile: '酒馆环境图1.png'
     },
     {
       name: '半酌小馆', distance: '2.5km', avgPrice: '¥88/人', rating: 4.5,
       specialty: '餐酒搭配小馆',
       reason: '暖光木质内饰，芝士拼盘和烟熏小食都有，配果香威士忌刚好。',
       interior: IMG.barBistroInterior,
-      imgFile: 'bar-bistro.png'
+      imgFile: '酒馆环境图2.png'
     },
     {
       name: '金夜酒廊', distance: '3.8km', avgPrice: '¥158/人', rating: 4.6,
       specialty: '鸡尾酒与烈酒',
       reason: '深色酒廊环境，调酒师手艺稳，不想动手直接点经典鸡尾酒。',
       interior: IMG.barLoungeInterior,
-      imgFile: 'bar-lounge.jpg',
+      imgFile: '酒馆环境图3.png',
       imgFallback: 'bar-lounge.jpg'
     }
   ];
@@ -961,8 +961,18 @@ function getWineCutoutUrl() {
 
 const DISH_IMAGES = {
   '盐焗花生米': 'dishPeanuts',
-  '卤牛肉切片': 'dishBeef'
+  '酒鬼花生': 'dishPeanuts',
+  '卤牛肉切片': 'dishBeef',
+  '卤切牛肉': 'dishBeef',
+  '卤牛腱子': 'dishBeef'
 };
+
+function getDishAssetKey(name) {
+  if (DISH_IMAGES[name]) return DISH_IMAGES[name];
+  if (/花生|坚果/i.test(name)) return 'dishPeanuts';
+  if (/牛|牛肉|腱|扒|排/i.test(name)) return 'dishBeef';
+  return null;
+}
 
 function showScannerPreview() {}
 
@@ -1334,7 +1344,7 @@ function renderDishes() {
     } else if ((d._imageGenerating || dishImagesGenerating) && sessionData?.aiRecognized) {
       thumb = '<div class="w-full h-full bg-neutral-200 animate-pulse flex items-center justify-center"><span class="text-[10px] text-neutral-400">绘制中</span></div>';
     } else {
-      const imgKey = DISH_IMAGES[d.name];
+      const imgKey = getDishAssetKey(d.name);
       thumb = imgKey && IMG[imgKey]
         ? `<img src="${IMG[imgKey]}" alt="${d.name}" class="w-full h-full object-cover" onerror="imgFallback(this, '${imgKey === 'dishPeanuts' ? '酒鬼花生.png' : '卤切牛肉.png'}')" />`
         : '<span class="text-2xl">🍽</span>';
