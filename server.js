@@ -330,10 +330,13 @@ const DISH_PROMPT = `${BARTENDER_PERSONA}
 请严格只输出一个 JSON 对象，不要 markdown：
 {"rating":"强烈推荐|可以|建议换一道","ratingClass":"good|ok|bad","analysis":"","tastePairing":"","utility":"","calories":"","improvedRecipe":{"name":"","steps":[]},"swapSuggestion":""}`;
 
+const API_BUILD = '2026-06-07-v2';
+
 app.get('/api/health', (req, res) => {
   const missing = ensureConfig();
   res.json({
     ok: missing.length === 0,
+    build: API_BUILD,
     service: 'jinling-jiugui-api',
     visionModel: VISION_MODEL || null,
     reasonModel: REASON_MODEL || null,
