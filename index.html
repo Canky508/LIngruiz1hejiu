@@ -719,7 +719,7 @@ async function resolveApiBase() {
 async function checkApiHealth() {
   try {
     await resolveApiBase();
-    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(8000) });
+    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(45000) });
     const data = await res.json();
     apiOnline = res.ok && data.ok;
     imageGenAvailable = !!(data.imageGenAvailable);
@@ -756,7 +756,7 @@ async function warmupApi(timeoutMs = 12000) {
 
 async function warmupApiIfNeeded(force = false) {
   if (!force && apiOnline && Date.now() - lastWarmupAt < WARMUP_TTL_MS) return true;
-  return warmupApi(apiOnline ? 6000 : 15000);
+  return warmupApi(apiOnline ? 8000 : 45000);
 }
 
 function scheduleApiKeepAlive() {
@@ -831,7 +831,7 @@ async function recognizeWithAI(imageBase64) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64 })
-  }, 120000);
+  }, 150000);
   const wineData = await wineRes.json();
   if (!wineRes.ok) throw new Error(wineData.error || '识酒 API 失败');
   return wineData.wine;
@@ -1336,8 +1336,10 @@ async function runRecognize() {
   try {
     if (shouldUseAI) {
       if (recognizeCancelled) return;
+      document.getElementById('loadingText').textContent = '正在唤醒 AI 服务（首次约需30秒）...';
+      await warmupApi(45000);
+      if (!apiOnline) throw new Error('API 未响应，请检查 config.js 中的地址是否为 https://jinling-api.onrender.com');
       document.getElementById('loadingText').textContent = '认真看酒标中...';
-      warmupApiIfNeeded(!!uploadedImage).catch(() => {});
       const imageBase64 = await getImageForRecognition();
       if (recognizeCancelled) return;
 
