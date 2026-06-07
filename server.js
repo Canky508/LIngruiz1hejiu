@@ -80,7 +80,7 @@ async function generateImage(prompt) {
   const response = await axios.post(`https://${VOLC_HOST}/api/v3/images/generations`, {
     model: IMAGE_MODEL,
     prompt: String(prompt).slice(0, 600),
-    size: '1024x1024',
+    size: '768x768',
     response_format: 'url',
     watermark: false,
     sequential_image_generation: 'disabled'
@@ -216,7 +216,7 @@ const PLAN_PROMPT = `${BARTENDER_PERSONA}
 - planName 2-6字有画面感，体现调配创意，勿用「纯饮法」「窖香纯饮」等
 - flavorNote 说明辅料如何呼应这款酒的香气/口感，可口语化
 
-配菜 reason 接地气幽默；dishAnalysis 风趣专业。勿用「老金」「叔」「师傅」等自我称呼。
+配菜 reason 接地气幽默；dishAnalysis 风趣专业。禁止「老金」「叔」「师傅」「听叔的」等任何自我称呼或长辈口吻。
 请严格只输出一个 JSON 对象，不要 markdown：
 {"cocktail":{"planName":"","planSubtitle":"","style":"","difficulty":"","materials":[{"name":"","amount":"","unitPrice":0,"subtotal":0}],"tools":[],"steps":[],"totalCost":0,"flavorNote":""},"tiers":{"casual":{"label":"平民下酒菜","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"lifestyle":{"label":"精致小生活","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"premium":{"label":"高端酒局","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]}},"dishAnalysis":{"麻辣小龙虾":{"rating":"强烈推荐|可以|建议换一道","ratingClass":"good|ok|bad","analysis":"","tastePairing":"","utility":"","calories":"","improvedRecipe":{"name":"","steps":[]},"swapSuggestion":""}}}`;
 

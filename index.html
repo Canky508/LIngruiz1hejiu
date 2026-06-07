@@ -30,6 +30,9 @@
     .light-screen { background: #FFFFFF; color: #1A1A1A; min-height: 100vh; }
     .attr-card { width: 76px; height: 76px; border-radius: 14px; }
     .sticky-cta { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 390px; z-index: 40; }
+    .page-scroll { padding-bottom: 12.5rem; }
+    .page-scroll-tall { padding-bottom: 13.5rem; }
+    .img-loading { background: #f0f0f0; }
     .cutout-stage {
       background: linear-gradient(180deg, #F5F5F5 0%, #FFFFFF 100%);
       display: flex; align-items: center; justify-content: center;
@@ -116,7 +119,7 @@
 
   <!-- ===== 识酒结果（亮色） ===== -->
   <div class="screen light-screen" id="screen-wine">
-    <div class="px-5 pt-2 pb-32 fade-in">
+    <div class="px-5 pt-2 page-scroll fade-in">
       <button type="button" onclick="goTo('upload')" class="text-sm text-neutral-500 mb-4 flex items-center gap-1">
         <span class="material-symbols-outlined text-lg">arrow_back</span> 重新识酒
       </button>
@@ -171,7 +174,7 @@
 
   <!-- ===== 调酒方案（亮色） ===== -->
   <div class="screen light-screen" id="screen-cocktail">
-    <div class="px-5 pt-2 pb-32 fade-in">
+    <div class="px-5 pt-2 page-scroll fade-in">
       <button type="button" onclick="goTo('wine')" class="text-sm text-neutral-500 mb-4 flex items-center gap-1">
         <span class="material-symbols-outlined text-lg">arrow_back</span> 识酒结果
       </button>
@@ -216,7 +219,7 @@
 
   <!-- ===== 下酒菜（亮色） ===== -->
   <div class="screen light-screen" id="screen-food">
-    <div class="px-5 pt-2 pb-36 fade-in">
+    <div class="px-5 pt-2 page-scroll-tall fade-in">
       <button type="button" onclick="goTo('cocktail')" class="text-sm text-neutral-500 mb-4 flex items-center gap-1">
         <span class="material-symbols-outlined text-lg">arrow_back</span> 调酒方案
       </button>
@@ -245,7 +248,7 @@
 
   <!-- ===== 酒局分享（浅灰底） ===== -->
   <div class="screen bg-neutral-100 min-h-screen" id="screen-share">
-    <div class="px-5 pt-2 pb-32 fade-in">
+    <div class="px-5 pt-2 page-scroll fade-in">
       <button type="button" onclick="goTo('food')" class="text-sm text-neutral-500 mb-4 flex items-center gap-1">
         <span class="material-symbols-outlined text-lg">arrow_back</span> 下酒菜
       </button>
@@ -259,8 +262,6 @@
         <button type="button" onclick="copyShare()" class="flex-1 border border-black py-3 rounded-2xl font-sans text-sm font-medium">复制邀请</button>
         <button type="button" onclick="copyShare()" class="flex-1 bg-black text-white py-3 rounded-2xl font-sans text-sm font-medium">分享给好友</button>
       </div>
-
-      <div class="bg-neutral-200/60 rounded-xl px-4 py-3 text-center font-mono text-xs text-neutral-500 mb-4">jinling.bar/party/demo123</div>
 
       <div class="bg-white rounded-[20px] p-4 shadow-sm">
         <p class="font-serif text-base mb-1">一起改酒单</p>
@@ -280,7 +281,7 @@
 
   <!-- ===== 附近酒馆（亮色 · 设计图规范） ===== -->
   <div class="screen light-screen" id="screen-bars">
-    <div class="px-5 pt-2 pb-32 fade-in">
+    <div class="px-5 pt-2 page-scroll fade-in">
       <button type="button" onclick="goTo('share')" class="text-sm text-neutral-500 mb-4 flex items-center gap-1">
         <span class="material-symbols-outlined text-lg">arrow_back</span> 酒局方案
       </button>
@@ -355,22 +356,31 @@ function imgFallback(el, name) {
   el.src = imgPath(name, IMG_PATHS[tried]);
 }
 
+function setLazyImg(el, src, eager = false) {
+  if (!el) return;
+  el.classList.add('img-loading');
+  el.loading = eager ? 'eager' : 'lazy';
+  el.decoding = 'async';
+  el.onload = () => el.classList.remove('img-loading');
+  el.src = src;
+}
+
 function buildImgConfig() {
   IMG_BASE = detectImgBase();
   IMG = {
-    party: imgPath('酒馆环境图4.png'),
-    cocktailAmber: imgPath('琥珀暖冬.png'),
+    party: imgPath('party-wine-cellar.png'),
+    cocktailAmber: imgPath('cocktail-amber-winter.png'),
     homeHero: imgPath('首页设计图.png'),
-    barWhiskyInterior: imgPath('酒馆环境图1.png'),
-    barBistroInterior: imgPath('酒馆环境图2.png'),
-    barLoungeInterior: imgPath('酒馆环境图3.png'),
+    barWhiskyInterior: imgPath('bar-whisky.png'),
+    barBistroInterior: imgPath('bar-bistro.png'),
+    barLoungeInterior: imgPath('bar-lounge.jpg'),
     barLoungeFallback: imgPath('bar-lounge.jpg'),
-    whisky: imgPath('麦卡伦.png'),
-    red: imgPath('红酒.png'),
-    baijiu: imgPath('白酒.png'),
-    whiskyCutout: imgPath('麦卡伦.png'),
-    redCutout: imgPath('红酒.png'),
-    baijiuCutout: imgPath('白酒.png'),
+    whisky: imgPath('sample-whisky.png'),
+    red: imgPath('sample-red.png'),
+    baijiu: imgPath('sample-baijiu.png'),
+    whiskyCutout: imgPath('sample-whisky.png'),
+    redCutout: imgPath('sample-red.png'),
+    baijiuCutout: imgPath('sample-baijiu.png'),
     dishPeanuts: imgPath('酒鬼花生.png'),
     dishBeef: imgPath('卤切牛肉.png')
   };
@@ -521,21 +531,21 @@ function getBars() {
       specialty: '单一麦芽威士忌吧',
       reason: '麦卡伦现货齐全，吧台氛围专业，懒得在家折腾就来这儿，靠谱。',
       interior: IMG.barWhiskyInterior,
-      imgFile: '酒馆环境图1.png'
+      imgFile: 'bar-whisky.png'
     },
     {
       name: '半酌小馆', distance: '2.5km', avgPrice: '¥88/人', rating: 4.5,
       specialty: '餐酒搭配小馆',
       reason: '暖光木质内饰，芝士拼盘和烟熏小食都有，配果香威士忌刚好。',
       interior: IMG.barBistroInterior,
-      imgFile: '酒馆环境图2.png'
+      imgFile: 'bar-bistro.png'
     },
     {
       name: '金夜酒廊', distance: '3.8km', avgPrice: '¥158/人', rating: 4.6,
       specialty: '鸡尾酒与烈酒',
       reason: '深色酒廊环境，调酒师手艺稳，不想动手直接点经典鸡尾酒。',
       interior: IMG.barLoungeInterior,
-      imgFile: '酒馆环境图3.png',
+      imgFile: 'bar-lounge.jpg',
       imgFallback: 'bar-lounge.jpg'
     }
   ];
@@ -569,6 +579,7 @@ let preparedImageBase64 = null;
 let lastWarmupAt = 0;
 const WARMUP_TTL_MS = 120000;
 let planImagesGenerating = false;
+let dishImagesGenerating = false;
 let imageGenAvailable = false;
 
 async function resolveApiBase() {
@@ -649,7 +660,7 @@ function scheduleApiKeepAlive() {
 function precompressUploadedImage() {
   if (!uploadedImage) { preparedImageBase64 = null; return; }
   preparedImageBase64 = null;
-  compressImageForApi(uploadedImage, 640, 0.68)
+  compressImageForApi(uploadedImage, 512, 0.62)
     .then(b64 => { preparedImageBase64 = b64; })
     .catch(() => { preparedImageBase64 = null; });
 }
@@ -686,7 +697,7 @@ async function urlToDataUrl(url) {
   });
 }
 
-async function compressImageForApi(src, maxEdge = 640, quality = 0.68) {
+async function compressImageForApi(src, maxEdge = 512, quality = 0.62) {
   const dataUrl = src.startsWith('data:') ? src : await urlToDataUrl(src);
   const img = await loadImageElement(dataUrl);
   let { width, height } = img;
@@ -731,15 +742,29 @@ async function generatePlanWithAI(wine) {
   return planData;
 }
 
-async function generatePlanImagesWithAI(wine, cocktail, tiers) {
-  const res = await apiFetch('/api/generate-plan-images', {
+async function ensureImageGenReady() {
+  if (imageGenAvailable) return true;
+  try {
+    await resolveApiBase();
+    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(6000) });
+    const data = await res.json();
+    imageGenAvailable = !!(data.imageGenAvailable);
+    apiOnline = res.ok && data.ok;
+  } catch {}
+  return imageGenAvailable;
+}
+
+async function generateOneImage(type, extra = {}) {
+  const body = { type, wine: sessionData.wine, cocktail: sessionData.cocktail };
+  if (type === 'dish') body.dish = extra.dish;
+  const res = await apiFetch('/api/generate-image', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wine, cocktail, tiers })
-  }, 300000);
+    body: JSON.stringify(body)
+  }, 120000);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '效果图 API 失败');
-  return data;
+  if (!res.ok) throw new Error(data.error || '生图失败');
+  return data.imageUrl;
 }
 
 function setCocktailHeroLoading(show) {
@@ -747,30 +772,64 @@ function setCocktailHeroLoading(show) {
   if (el) el.classList.toggle('hidden', !show);
 }
 
-async function generateAndApplyPlanImages() {
-  if (planImagesGenerating || !sessionData?.aiRecognized || !imageGenAvailable) return;
-  if (!sessionData.cocktail || !sessionData.wine) return;
-  planImagesGenerating = true;
+async function generateCocktailImageOnly() {
+  if (!sessionData?.cocktail || sessionData.cocktail.imageUrl) return;
+  const ready = await ensureImageGenReady();
+  if (!ready) return;
   setCocktailHeroLoading(true);
   try {
-    const data = await generatePlanImagesWithAI(sessionData.wine, sessionData.cocktail, sessionData.tiers);
-    if (data.cocktailImageUrl) {
-      sessionData.cocktail.imageUrl = data.cocktailImageUrl;
-      renderCocktail();
+    const url = await generateOneImage('cocktail');
+    sessionData.cocktail.imageUrl = url;
+    renderCocktail();
+  } catch (err) {
+    console.warn('调酒生图失败:', err.message);
+  } finally {
+    setCocktailHeroLoading(false);
+  }
+}
+
+async function generateDishImagesAsync() {
+  if (dishImagesGenerating || !sessionData?.tiers || !sessionData?.aiRecognized) return;
+  const ready = await ensureImageGenReady();
+  if (!ready) return;
+  const pending = [];
+  for (const tier of Object.values(sessionData.tiers)) {
+    for (const dish of tier.dishes || []) {
+      if (!dish.imageUrl && !dish._imageGenerating && !pending.some(d => d.name === dish.name)) {
+        pending.push(dish);
+      }
     }
-    if (data.dishImages && sessionData.tiers) {
+  }
+  if (!pending.length) return;
+  dishImagesGenerating = true;
+  if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
+  for (const dish of pending) {
+    dish._imageGenerating = true;
+    if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
+    try {
+      const url = await generateOneImage('dish', { dish });
       for (const tier of Object.values(sessionData.tiers)) {
-        for (const dish of tier.dishes || []) {
-          if (data.dishImages[dish.name]) dish.imageUrl = data.dishImages[dish.name];
+        for (const d of tier.dishes || []) {
+          if (d.name === dish.name) d.imageUrl = url;
         }
       }
-      if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
+    } catch (err) {
+      console.warn('菜品生图失败:', dish.name, err.message);
     }
-  } catch (err) {
-    console.warn('效果图生成失败:', err.message);
+    dish._imageGenerating = false;
+    if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
+  }
+  dishImagesGenerating = false;
+}
+
+async function generateAndApplyPlanImages() {
+  if (planImagesGenerating || !sessionData?.aiRecognized) return;
+  planImagesGenerating = true;
+  try {
+    await generateCocktailImageOnly();
+    generateDishImagesAsync();
   } finally {
     planImagesGenerating = false;
-    setCocktailHeroLoading(false);
   }
 }
 
@@ -793,7 +852,7 @@ async function init() {
   buildImgConfig();
   const heroEl = document.getElementById('homeHeroImg');
   if (heroEl) {
-    heroEl.src = IMG.homeHero;
+    setLazyImg(heroEl, IMG.homeHero, true);
     heroEl.onerror = function() { imgFallback(this, '首页设计图.png'); };
   }
   renderStepBar();
@@ -984,11 +1043,15 @@ async function goToCocktail() {
   }
   renderCocktail();
   goTo('cocktail');
-  if (sessionData?.aiRecognized && imageGenAvailable && sessionData.cocktail && !sessionData.cocktail.imageUrl) {
+  if (sessionData?.aiRecognized && sessionData.cocktail) {
     generateAndApplyPlanImages();
   }
 }
-function goToFood() { renderFood(); goTo('food'); }
+function goToFood() {
+  renderFood();
+  goTo('food');
+  if (sessionData?.aiRecognized) generateDishImagesAsync();
+}
 function goToShare() { renderShare(); goTo('share'); }
 function goToBars() { renderBars(); goTo('bars'); }
 
@@ -1034,10 +1097,8 @@ async function runRecognize() {
     if (shouldUseAI) {
       if (recognizeCancelled) return;
       document.getElementById('loadingText').textContent = '认真看酒标中...';
-      const [, imageBase64] = await Promise.all([
-        warmupApiIfNeeded(!!uploadedImage),
-        getImageForRecognition()
-      ]);
+      warmupApiIfNeeded(!!uploadedImage).catch(() => {});
+      const imageBase64 = await getImageForRecognition();
       if (recognizeCancelled) return;
 
       const wine = await recognizeWithAI(imageBase64);
@@ -1075,7 +1136,7 @@ function renderWine() {
   const w = getData().wine;
   const sample = SAMPLES.find(s => s.id === selectedSample);
   const cutoutEl = document.getElementById('wineBottleImg');
-  cutoutEl.src = getWineCutoutUrl();
+  setLazyImg(cutoutEl, getWineCutoutUrl());
   cutoutEl.alt = w.wineName;
   const cutoutFiles = { whisky: '麦卡伦.png', red: '红酒.png', baijiu: '白酒.png' };
   cutoutEl.onerror = function() { imgFallback(this, cutoutFiles[selectedSample] || '麦卡伦.png'); };
@@ -1163,7 +1224,7 @@ function renderDishes() {
     let thumb;
     if (d.imageUrl) {
       thumb = `<img src="${d.imageUrl}" alt="${d.name}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>🍽</span>'" />`;
-    } else if (planImagesGenerating && sessionData?.aiRecognized && imageGenAvailable) {
+    } else if ((d._imageGenerating || dishImagesGenerating) && sessionData?.aiRecognized) {
       thumb = '<div class="w-full h-full bg-neutral-200 animate-pulse flex items-center justify-center"><span class="text-[10px] text-neutral-400">绘制中</span></div>';
     } else {
       const imgKey = DISH_IMAGES[d.name];
@@ -1237,7 +1298,7 @@ function renderShare() {
       <span class="material-symbols-outlined text-neutral-300">wine_bar</span>
     </div>
     <div class="relative h-40 rounded-2xl overflow-hidden mb-5 -mx-1">
-      <img src="${IMG.party}" alt="今晚酒局" class="w-full h-full object-cover" />
+      <img src="${IMG.party}" alt="今晚酒局" class="w-full h-full object-cover" loading="lazy" decoding="async" />
       <div class="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent"></div>
       <p class="absolute bottom-4 left-4 font-serif text-white text-xl">今晚酒局</p>
     </div>
@@ -1256,7 +1317,7 @@ function renderShare() {
 function copyShare() {
   const w = getData().wine;
   const c = getData().cocktail;
-  const text = `【金灵酒鬼】今晚酒局\n🍾 ${w.wineName}\n🍸 ${c.planName}\n一起来改酒单和菜单！\n链接：jinling.bar/party/demo123`;
+  const text = `【什么?灵瑞在喝酒】今晚酒局\n🍾 ${w.wineName}\n🍸 ${c.planName}\n一起来改酒单和菜单！`;
   navigator.clipboard?.writeText(text).then(() => alert('邀请文案已复制！')).catch(() => alert(text));
 }
 
