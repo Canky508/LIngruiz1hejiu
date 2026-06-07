@@ -37,6 +37,29 @@
       background: linear-gradient(180deg, #F5F5F5 0%, #FFFFFF 100%);
       display: flex; align-items: center; justify-content: center;
     }
+    .wine-hero-stage {
+      align-items: flex-end;
+      justify-content: center;
+      gap: 0;
+      padding: 1.25rem 0.5rem 0.75rem;
+      overflow: hidden;
+    }
+    .wine-hero-stage .cutout-hero {
+      height: 13rem;
+      max-width: 46%;
+      flex-shrink: 0;
+    }
+    .wine-ip-guide {
+      height: 13rem;
+      max-width: 46%;
+      object-fit: contain;
+      object-position: bottom center;
+      flex-shrink: 0;
+      margin-left: -0.25rem;
+      filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
+      pointer-events: none;
+      user-select: none;
+    }
     .cutout-hero { object-fit: contain; filter: drop-shadow(0 16px 32px rgba(0,0,0,0.12)); }
   </style>
 </head>
@@ -124,9 +147,10 @@
         <span class="material-symbols-outlined text-lg">arrow_back</span> 重新识酒
       </button>
 
-      <div class="relative cutout-stage rounded-[20px] py-10 mb-2 mx-0 min-h-[240px]">
-        <p class="absolute font-serif text-6xl text-black/[0.03] rotate-90 whitespace-nowrap select-none pointer-events-none" id="wineDecorText">Single Malt</p>
-        <img id="wineBottleImg" src="" alt="酒瓶" class="cutout-hero h-56 max-w-[220px] relative z-10" />
+      <div class="relative cutout-stage wine-hero-stage rounded-[20px] mb-2 mx-0 min-h-[240px]">
+        <p class="absolute font-serif text-6xl text-black/[0.03] rotate-90 whitespace-nowrap select-none pointer-events-none left-2 top-1/2 -translate-y-1/2" id="wineDecorText">Single Malt</p>
+        <img id="wineBottleImg" src="" alt="酒瓶" class="cutout-hero relative z-10" />
+        <img id="wineIpGuide" src="" alt="灵瑞讲解" class="wine-ip-guide relative z-10" />
       </div>
 
       <h2 class="font-serif text-2xl text-center text-black leading-tight mb-3" id="wineName">—</h2>
@@ -371,6 +395,7 @@ function buildImgConfig() {
     party: imgPath('party-wine-cellar.png'),
     cocktailAmber: imgPath('cocktail-amber-winter.png'),
     homeHero: imgPath('首页设计图.png'),
+    ipWineGuide: imgPath('ip-wine-guide.jpg'),
     barWhiskyInterior: imgPath('bar-whisky.png'),
     barBistroInterior: imgPath('bar-bistro.png'),
     barLoungeInterior: imgPath('bar-lounge.jpg'),
@@ -854,6 +879,11 @@ async function init() {
   if (heroEl) {
     setLazyImg(heroEl, IMG.homeHero, true);
     heroEl.onerror = function() { imgFallback(this, '首页设计图.png'); };
+  }
+  const ipGuideEl = document.getElementById('wineIpGuide');
+  if (ipGuideEl) {
+    setLazyImg(ipGuideEl, IMG.ipWineGuide);
+    ipGuideEl.onerror = function() { imgFallback(this, 'ip-wine-guide.jpg'); };
   }
   renderStepBar();
   renderSamples();
