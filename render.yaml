@@ -16,5 +16,7 @@ services:
         sync: false
       - key: VOLC_TEXT_MODEL_ID
         sync: false
+      - key: VOLC_IMAGE_MODEL_ID
+        sync: false
       - key: VOLC_MODEL_ID
         sync: false

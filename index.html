@@ -104,7 +104,7 @@
         <span class="material-symbols-outlined text-5xl text-white/30">wine_bar</span>
       </div>
       <p id="loadingText" class="font-sans text-white/80 text-base mb-2">正在认真看酒标...</p>
-      <p id="loadingHint" class="font-sans text-white/40 text-xs mt-2 px-4 leading-relaxed">首次调用 AI 可能需要 30–60 秒，请稍候</p>
+      <p id="loadingHint" class="font-sans text-white/40 text-xs mt-2 px-4 leading-relaxed">识酒约 15–30 秒；若超过 1 分钟，可能是服务刚唤醒</p>
       <div class="flex gap-2 mt-4" id="loadingDots">
         <div class="w-1.5 h-1.5 rounded-full bg-brand-red"></div>
         <div class="w-1.5 h-1.5 rounded-full bg-white/20"></div>
@@ -180,6 +180,10 @@
       <p class="font-sans text-xs text-neutral-400 mb-4" id="planMeta"></p>
       <div class="relative w-full cutout-stage rounded-[20px] overflow-hidden mb-5 min-h-[220px] py-6">
         <img id="cocktailHeroImg" src="" alt="调酒方案" class="cutout-hero h-48 max-w-[85%]" />
+        <div id="cocktailHeroLoading" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+          <div class="w-8 h-8 border-2 border-brand-red border-t-transparent rounded-full animate-spin mb-2"></div>
+          <p class="text-xs text-neutral-500">AI 绘制调酒效果图中...</p>
+        </div>
       </div>
       <p class="font-sans text-sm text-neutral-500 leading-relaxed mb-6" id="flavorNote"></p>
 
@@ -373,7 +377,8 @@ function buildImgConfig() {
   COCKTAIL_HERO = {
     '琥珀暖冬': IMG.cocktailAmber,
     '红酒桑格利亚': IMG.redCutout,
-    '纯饮经典局': IMG.baijiuCutout
+    '窖香柚柚苏打': IMG.baijiuCutout,
+    '酱香青柠干姜': IMG.baijiuCutout
   };
   SAMPLES = [
     { id: 'whisky', name: '麦卡伦12年', label: '威士忌', decor: 'Sherry Oak', image: IMG.whisky, cutout: IMG.whiskyCutout },
@@ -478,14 +483,19 @@ const MOCK = {
       aroma: { primary: ['酱香','曲香','粮香'], summary: '典型茅香风格，复合香气浓郁。' },
       referencePrice: { min: 2400, max: 2800, note: '渠道差异大，仅供参考' },
       confidence: 'high', visibleEvidence: ['飞天茅台包装','53% vol','酱香型标识'],
-      bartenderTake: '酱香标杆，闻香就知道对不对路。纯饮小杯慢品就行，别整那些花活儿。'
+      bartenderTake: '酱香标杆，闻香就知道对不对路——拿它做特调，窖香才真的有用武之地。'
     },
     cocktail: {
-      planName: '纯饮经典局', planSubtitle: '茅台就该这么喝', style: '纯饮', difficulty: '入门',
-      materials: [{ name: '茅台飞天', amount: '30ml', unitPrice: 120, subtotal: 120 }],
-      tools: ['小酒杯','分酒器'],
-      steps: ['分酒器斟酒。','小杯七分满。','先闻香再小口品。','配温凉下酒菜慢饮。'],
-      totalCost: 120, flavorNote: '酱香型白酒建议纯饮，调配简直是暴殄天物。'
+      planName: '酱香青柠干姜', planSubtitle: '酱香别怕玩花样，气泡一托就顺口', style: '特调', difficulty: '入门',
+      materials: [
+        { name: '茅台飞天', amount: '30ml', unitPrice: 120, subtotal: 120 },
+        { name: '鲜榨青柠汁', amount: '20ml', unitPrice: 3, subtotal: 3 },
+        { name: '干姜汽水', amount: '80ml', unitPrice: 4, subtotal: 4 },
+        { name: '蜂蜜糖浆', amount: '10ml', unitPrice: 2, subtotal: 2 }
+      ],
+      tools: ['高球杯','吧勺','冰块','青柠角'],
+      steps: ['高球杯装满冰块，先凉杯。','倒入茅台30ml，加青柠汁和蜂蜜糖浆，轻搅5秒。','沿杯壁缓倒入干姜汽水，保留气泡。','挤一片青柠皮油，插青柠角装饰，趁冷喝。'],
+      totalCost: 129, flavorNote: '茅香厚重，青柠的酸和干姜汽水的辛香气泡把它托起来——像给酱香套了层清爽外套，家宴派对都能端。'
     },
     tiers: {
       casual: { label: '平民', dishes: [{ name: '凉拌黄瓜', reason: '清爽解腻，烈酒必备凉菜。', calories: '约80kcal', cost: '¥8', recipe: [] }]},
@@ -555,6 +565,11 @@ let currentTier = 'casual';
 let pendingRecognizeAfterPhoto = false;
 let recognizeCancelled = false;
 let loadingTimer = null;
+let preparedImageBase64 = null;
+let lastWarmupAt = 0;
+const WARMUP_TTL_MS = 120000;
+let planImagesGenerating = false;
+let imageGenAvailable = false;
 
 async function resolveApiBase() {
   if (API_BASE) return API_BASE;
@@ -587,12 +602,14 @@ async function resolveApiBase() {
 async function checkApiHealth() {
   try {
     await resolveApiBase();
-    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(20000) });
+    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(8000) });
     const data = await res.json();
     apiOnline = res.ok && data.ok;
+    imageGenAvailable = !!(data.imageGenAvailable);
     return data;
   } catch {
     apiOnline = false;
+    imageGenAvailable = false;
     return null;
   }
 }
@@ -605,16 +622,36 @@ async function apiFetch(path, options = {}, timeoutMs = 90000) {
   });
 }
 
-async function warmupApi() {
+async function warmupApi(timeoutMs = 12000) {
   try {
-    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(20000) });
+    await resolveApiBase();
+    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(timeoutMs) });
     const data = await res.json();
     apiOnline = res.ok && data.ok;
+    imageGenAvailable = !!(data.imageGenAvailable);
+    if (apiOnline) lastWarmupAt = Date.now();
     return apiOnline;
   } catch {
     apiOnline = false;
     return false;
   }
+}
+
+async function warmupApiIfNeeded(force = false) {
+  if (!force && apiOnline && Date.now() - lastWarmupAt < WARMUP_TTL_MS) return true;
+  return warmupApi(apiOnline ? 6000 : 15000);
+}
+
+function scheduleApiKeepAlive() {
+  setInterval(() => { warmupApi(5000).catch(() => {}); }, 240000);
+}
+
+function precompressUploadedImage() {
+  if (!uploadedImage) { preparedImageBase64 = null; return; }
+  preparedImageBase64 = null;
+  compressImageForApi(uploadedImage, 640, 0.68)
+    .then(b64 => { preparedImageBase64 = b64; })
+    .catch(() => { preparedImageBase64 = null; });
 }
 
 function updateApiStatus() {}
@@ -649,7 +686,7 @@ async function urlToDataUrl(url) {
   });
 }
 
-async function compressImageForApi(src, maxEdge = 960, quality = 0.75) {
+async function compressImageForApi(src, maxEdge = 640, quality = 0.68) {
   const dataUrl = src.startsWith('data:') ? src : await urlToDataUrl(src);
   const img = await loadImageElement(dataUrl);
   let { width, height } = img;
@@ -664,7 +701,10 @@ async function compressImageForApi(src, maxEdge = 960, quality = 0.75) {
 }
 
 async function getImageForRecognition() {
-  if (uploadedImage) return compressImageForApi(uploadedImage);
+  if (uploadedImage) {
+    if (preparedImageBase64) return preparedImageBase64;
+    return compressImageForApi(uploadedImage);
+  }
   if (selectedSample) return compressImageForApi(getSampleImage(selectedSample));
   throw new Error('请先拍照或选择示例酒款');
 }
@@ -674,7 +714,7 @@ async function recognizeWithAI(imageBase64) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64 })
-  }, 90000);
+  }, 60000);
   const wineData = await wineRes.json();
   if (!wineRes.ok) throw new Error(wineData.error || '识酒 API 失败');
   return wineData.wine;
@@ -685,10 +725,53 @@ async function generatePlanWithAI(wine) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wine })
-  });
+  }, 120000);
   const planData = await planRes.json();
   if (!planRes.ok) throw new Error(planData.error || '方案 API 失败');
   return planData;
+}
+
+async function generatePlanImagesWithAI(wine, cocktail, tiers) {
+  const res = await apiFetch('/api/generate-plan-images', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wine, cocktail, tiers })
+  }, 300000);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '效果图 API 失败');
+  return data;
+}
+
+function setCocktailHeroLoading(show) {
+  const el = document.getElementById('cocktailHeroLoading');
+  if (el) el.classList.toggle('hidden', !show);
+}
+
+async function generateAndApplyPlanImages() {
+  if (planImagesGenerating || !sessionData?.aiRecognized || !imageGenAvailable) return;
+  if (!sessionData.cocktail || !sessionData.wine) return;
+  planImagesGenerating = true;
+  setCocktailHeroLoading(true);
+  try {
+    const data = await generatePlanImagesWithAI(sessionData.wine, sessionData.cocktail, sessionData.tiers);
+    if (data.cocktailImageUrl) {
+      sessionData.cocktail.imageUrl = data.cocktailImageUrl;
+      renderCocktail();
+    }
+    if (data.dishImages && sessionData.tiers) {
+      for (const tier of Object.values(sessionData.tiers)) {
+        for (const dish of tier.dishes || []) {
+          if (data.dishImages[dish.name]) dish.imageUrl = data.dishImages[dish.name];
+        }
+      }
+      if (document.getElementById('screen-food')?.classList.contains('active')) renderDishes();
+    }
+  } catch (err) {
+    console.warn('效果图生成失败:', err.message);
+  } finally {
+    planImagesGenerating = false;
+    setCocktailHeroLoading(false);
+  }
 }
 
 async function analyzeDishWithAI(dishName) {
@@ -719,6 +802,8 @@ async function init() {
   document.getElementById('albumInput').onchange = handleImageFile;
   updateChrome('upload');
   await checkApiHealth();
+  scheduleApiKeepAlive();
+  warmupApiIfNeeded().catch(() => {});
 }
 
 function getSampleImage(id) {
@@ -825,6 +910,7 @@ function handleImageFile(e) {
     uploadedImage = ev.target.result;
     showScannerPreview(uploadedImage, 'upload');
     useRealAI = true;
+    precompressUploadedImage();
     if (pendingRecognizeAfterPhoto) {
       pendingRecognizeAfterPhoto = false;
     }
@@ -898,6 +984,9 @@ async function goToCocktail() {
   }
   renderCocktail();
   goTo('cocktail');
+  if (sessionData?.aiRecognized && imageGenAvailable && sessionData.cocktail && !sessionData.cocktail.imageUrl) {
+    generateAndApplyPlanImages();
+  }
 }
 function goToFood() { renderFood(); goTo('food'); }
 function goToShare() { renderShare(); goTo('share'); }
@@ -924,13 +1013,11 @@ async function runRecognize() {
 
   recognizeCancelled = false;
   showScreen('loading');
-  document.getElementById('loadingText').textContent = '正在连接 AI 服务...';
-  await resolveApiBase();
-  await warmupApi();
+  document.getElementById('loadingText').textContent = '正在准备识酒...';
 
   const shouldUseAI = !!(uploadedImage || useRealAI) || (apiOnline && !!selectedSample);
   const texts = shouldUseAI
-    ? ['正在连接 AI 服务...', '认真看酒标中...', '酒标、酒体颜色分析中...', '口感气味心里有数了...']
+    ? ['正在准备识酒...', '认真看酒标中...', '酒标、酒体颜色分析中...', '快好了，稍等几秒...']
     : ['加载示例酒款...', '品鉴笔记准备中...'];
   let i = 0;
   loadingTimer = setInterval(() => {
@@ -946,11 +1033,13 @@ async function runRecognize() {
   try {
     if (shouldUseAI) {
       if (recognizeCancelled) return;
-      document.getElementById('loadingText').textContent = '正在读取图片...';
-      const imageBase64 = await getImageForRecognition();
+      document.getElementById('loadingText').textContent = '认真看酒标中...';
+      const [, imageBase64] = await Promise.all([
+        warmupApiIfNeeded(!!uploadedImage),
+        getImageForRecognition()
+      ]);
       if (recognizeCancelled) return;
 
-      document.getElementById('loadingText').textContent = '认真看酒标中...';
       const wine = await recognizeWithAI(imageBase64);
       if (recognizeCancelled) return;
 
@@ -1024,14 +1113,23 @@ function renderWine() {
 function renderCocktail() {
   const c = getData().cocktail;
   const wineType = getData().wine?.wineType || '';
-  const heroSrc = COCKTAIL_HERO[c.planName]
+  const heroSrc = c.imageUrl
+    || COCKTAIL_HERO[c.planName]
     || (/威士忌|whisky/i.test(wineType) ? IMG.cocktailAmber : null)
     || (/红|葡萄酒/i.test(wineType) ? IMG.redCutout : null)
     || (/白|酱香/i.test(wineType) ? IMG.baijiuCutout : null)
     || IMG.cocktailAmber;
   const heroEl = document.getElementById('cocktailHeroImg');
   heroEl.src = heroSrc;
-  heroEl.onerror = function() { imgFallback(this, '琥珀暖冬.png'); };
+  heroEl.onerror = function() {
+    if (c.imageUrl && this.src === c.imageUrl) {
+      c.imageUrl = null;
+      renderCocktail();
+      return;
+    }
+    imgFallback(this, '琥珀暖冬.png');
+  };
+  setCocktailHeroLoading(planImagesGenerating && !c.imageUrl);
   document.getElementById('planName').textContent = c.planName;
   document.getElementById('planMeta').textContent = `${c.style || '鸡尾酒'} · ${c.difficulty || '入门'} · 约¥${c.totalCost}/杯`;
   document.getElementById('flavorNote').textContent = (c.planSubtitle ? c.planSubtitle + ' — ' : '') + (c.flavorNote || '');
@@ -1062,10 +1160,17 @@ function switchTier(k) { currentTier = k; renderFood(); }
 function renderDishes() {
   const dishes = getData().tiers[currentTier].dishes;
   document.getElementById('dishList').innerHTML = dishes.map(d => {
-    const imgKey = DISH_IMAGES[d.name];
-    const thumb = imgKey && IMG[imgKey]
-      ? `<img src="${IMG[imgKey]}" alt="${d.name}" class="w-full h-full object-cover" onerror="imgFallback(this, '${imgKey === 'dishPeanuts' ? '酒鬼花生.png' : '卤切牛肉.png'}')" />`
-      : '<span class="text-2xl">🍽</span>';
+    let thumb;
+    if (d.imageUrl) {
+      thumb = `<img src="${d.imageUrl}" alt="${d.name}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-2xl\\'>🍽</span>'" />`;
+    } else if (planImagesGenerating && sessionData?.aiRecognized && imageGenAvailable) {
+      thumb = '<div class="w-full h-full bg-neutral-200 animate-pulse flex items-center justify-center"><span class="text-[10px] text-neutral-400">绘制中</span></div>';
+    } else {
+      const imgKey = DISH_IMAGES[d.name];
+      thumb = imgKey && IMG[imgKey]
+        ? `<img src="${IMG[imgKey]}" alt="${d.name}" class="w-full h-full object-cover" onerror="imgFallback(this, '${imgKey === 'dishPeanuts' ? '酒鬼花生.png' : '卤切牛肉.png'}')" />`
+        : '<span class="text-2xl">🍽</span>';
+    }
     return `<div class="bg-white rounded-[20px] p-4 shadow-[0_4px_16px_rgba(0,0,0,0.06)] flex gap-3">
       <div class="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center overflow-hidden flex-shrink-0">${thumb}</div>
       <div class="flex-1 min-w-0">

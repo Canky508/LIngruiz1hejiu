@@ -19,6 +19,11 @@ const VOLC_API_KEY = process.env.VOLC_API_KEY;
 const VOLC_HOST = 'ark.cn-beijing.volces.com';
 const VISION_MODEL = process.env.VOLC_VISION_MODEL_ID || process.env.VOLC_MODEL_ID;
 const TEXT_MODEL = process.env.VOLC_TEXT_MODEL_ID || process.env.VOLC_MODEL_ID;
+const IMAGE_MODEL = process.env.VOLC_IMAGE_MODEL_ID || process.env.VOLC_MODEL_ID;
+
+function isImageGenAvailable() {
+  return !!(VOLC_API_KEY && IMAGE_MODEL);
+}
 
 function ensureConfig() {
   const missing = [];
@@ -37,20 +42,21 @@ function extractJSON(text) {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function callVolc(modelId, messages, maxTokens = 2048) {
+async function callVolc(modelId, messages, maxTokens = 2048, opts = {}) {
+  const { retries = 3, timeout = 120000 } = opts;
   if (!VOLC_API_KEY) throw new Error('未配置 VOLC_API_KEY');
   if (!modelId) throw new Error('未配置模型接入点 ID');
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${VOLC_API_KEY}`
   };
-  const body = { model: modelId, messages, temperature: 0.4, max_tokens: maxTokens };
+  const body = { model: modelId, messages, temperature: 0.35, max_tokens: maxTokens };
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await axios.post(`https://${VOLC_HOST}/api/v3/chat/completions`, body, {
         headers,
-        timeout: 120000,
+        timeout,
         maxBodyLength: Infinity,
         maxContentLength: Infinity
       });
@@ -59,7 +65,7 @@ async function callVolc(modelId, messages, maxTokens = 2048) {
     } catch (error) {
       lastError = error;
       const retryable = ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED'].includes(error.code);
-      if (retryable && attempt < 2) {
+      if (retryable && attempt < retries - 1) {
         await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
         continue;
       }
@@ -69,11 +75,55 @@ async function callVolc(modelId, messages, maxTokens = 2048) {
   throw lastError;
 }
 
+async function generateImage(prompt) {
+  if (!isImageGenAvailable()) throw new Error('未配置生图模型 VOLC_IMAGE_MODEL_ID');
+  const response = await axios.post(`https://${VOLC_HOST}/api/v3/images/generations`, {
+    model: IMAGE_MODEL,
+    prompt: String(prompt).slice(0, 600),
+    size: '1024x1024',
+    response_format: 'url',
+    watermark: false,
+    sequential_image_generation: 'disabled'
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${VOLC_API_KEY}`
+    },
+    timeout: 120000
+  });
+  const url = response.data?.data?.[0]?.url;
+  if (!url) throw new Error('生图 API 未返回图片 URL');
+  return url;
+}
+
+function buildCocktailImagePrompt(wine, cocktail) {
+  const materials = (cocktail.materials || []).map(m => m.name).filter(Boolean).join('、');
+  return `专业美食摄影，鸡尾酒「${cocktail.planName || '特调'}」成品特写，${wine.wineName || ''}基酒特调，配料含${materials || '果汁与气泡水'}，${cocktail.style || '鸡尾酒'}风格，精致玻璃杯，浅色渐变背景产品抠图感，暖色柔光，高端酒吧 aesthetic，画面干净，无文字无水印无人物`;
+}
+
+function buildDishImagePrompt(wine, cocktail, dish) {
+  return `专业美食摄影，中式下酒菜「${dish.name}」特写，精致摆盘，暖色食欲感灯光，浅色背景，与${wine.wineName || '美酒'}酒局搭配，画面干净，无文字无水印无人物`;
+}
+
+async function mapWithConcurrency(items, fn, limit = 2) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function formatApiError(error) {
   const msg = error.response?.data?.error?.message || error.message || '';
   if (/overdue balance/i.test(msg)) return '火山引擎账户欠费，请充值后重试';
   if (/does not support multimodal|image_url/i.test(msg)) return '当前模型不支持识图，请配置 VOLC_VISION_MODEL_ID 为多模态接入点';
   if (/authentication|api key|unauthorized/i.test(msg)) return 'API Key 无效，请检查 VOLC_API_KEY';
+  if (/image model|images\/generations|seedream/i.test(msg)) return '生图模型未开通或接入点无效，请配置 VOLC_IMAGE_MODEL_ID（Seedream 文生图）';
   return msg || '请求失败';
 }
 
@@ -111,6 +161,22 @@ function normalizeWine(wine) {
   };
 }
 
+function isPureDrinkPlan(cocktail) {
+  const style = (cocktail.style || '').toLowerCase();
+  const name = cocktail.planName || '';
+  if (/纯饮|直饮|原酒|温饮|neat/i.test(style)) return true;
+  if (/纯饮|直饮|窖香纯饮|经典局|就是这么喝|别兑|不要混/i.test(name)) return true;
+  const mats = Array.isArray(cocktail.materials) ? cocktail.materials : [];
+  if (mats.length < 3) return true;
+  const mixerCount = mats.filter(m => /汁|汽水|苏打|汤力|糖浆|蜜|苦精|利口|茶|柠|橙|柚|姜|薄荷|气泡|可乐|干姜|蜂蜜|糖浆|冰块/i.test(m.name || '')).length;
+  if (mixerCount < 2) return true;
+  const steps = Array.isArray(cocktail.steps) ? cocktail.steps : [];
+  if (steps.length < 4) return true;
+  const flavor = cocktail.flavorNote || '';
+  if (/建议纯饮|纯饮即可|不要调配|暴殄天物|别混|别兑/i.test(flavor)) return true;
+  return false;
+}
+
 function normalizePlan(plan) {
   const cocktail = plan.cocktail || {};
   return {
@@ -134,15 +200,23 @@ const BARTENDER_PERSONA = `你是金灵酒鬼的驻店调酒师：二十多岁�
 
 const WINE_PROMPT = `${BARTENDER_PERSONA}
 
-请分析用户上传的酒瓶照片。只根据可见内容判断，看不清不要编造；酒标模糊则 confidence 标 low，并在 bartenderTake 里轻松提醒补拍。
-taste.summary/aroma.summary 客观好懂；bartenderTake 为个性品鉴点评（无自我称呼）；visibleEvidence 为专业依据。
-请严格只输出一个 JSON 对象，不要 markdown：
+分析酒瓶照片，仅据可见内容判断，看不清不编造；模糊则 confidence=low 并提醒补拍。bartenderTake 1-2句俏皮点评（无自我称呼）。只输出 JSON，无 markdown：
 {"wineName":"","wineType":"","brand":"","origin":"","vintage":"","abv":"","color":"","taste":{"sweetness":"","acidity":"","tannin":"","body":"","finish":"","summary":""},"aroma":{"primary":[],"secondary":[],"summary":""},"referencePrice":{"min":0,"max":0,"currency":"CNY","note":"国内市场参考区间，仅供参考"},"servingTips":"","confidence":"high|medium|low","visibleEvidence":[],"bartenderTake":""}`;
 
 const PLAN_PROMPT = `${BARTENDER_PERSONA}
 
-根据识酒结果生成：①调酒/饮用方案 ②三档下酒菜 ③「麻辣小龙虾」点评。
-planName 2-6字有个性；planSubtitle 可选俏皮副标题；steps 可口语化但可执行；flavorNote 含搭配逻辑+一句总结；配菜 reason 接地气、幽默；dishAnalysis.analysis 风趣但专业，rating 须符合搭配逻辑。全程勿用「老金」「叔」「师傅」等自我称呼。
+根据识酒结果生成：①创意特调鸡尾酒方案 ②三档下酒菜 ③「麻辣小龙虾」点评。
+
+【调酒硬性要求 — 必须遵守】
+- 必须输出可在家执行的调配方案，禁止仅「纯饮/加冰直饮/温饮/分酒器斟酒」等无调配步骤的方案
+- style 填「鸡尾酒」「特调」「Long Drink」「经典改编」等，禁止填「纯饮」
+- materials 至少3项：识出的基酒 + 至少2种辅料（果汁/气泡水/苏打/汤力/糖浆/苦精/利口酒/茶/柑橘/姜饮等），写清用量与参考单价
+- steps 至少4步，写清用量、顺序、搅拌/摇晃/加冰/装饰等具体操作
+- 白酒/浓香/酱香也要给创意特调（例：浓香+柚子汁+苏打；酱香+青柠+干姜汽水+蜂蜜；或茶酒、Highball、酸酒改编），体现「认出这瓶酒才能配出这道特调」
+- planName 2-6字有画面感，体现调配创意，勿用「纯饮法」「窖香纯饮」等
+- flavorNote 说明辅料如何呼应这款酒的香气/口感，可口语化
+
+配菜 reason 接地气幽默；dishAnalysis 风趣专业。勿用「老金」「叔」「师傅」等自我称呼。
 请严格只输出一个 JSON 对象，不要 markdown：
 {"cocktail":{"planName":"","planSubtitle":"","style":"","difficulty":"","materials":[{"name":"","amount":"","unitPrice":0,"subtotal":0}],"tools":[],"steps":[],"totalCost":0,"flavorNote":""},"tiers":{"casual":{"label":"平民下酒菜","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"lifestyle":{"label":"精致小生活","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"premium":{"label":"高端酒局","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]}},"dishAnalysis":{"麻辣小龙虾":{"rating":"强烈推荐|可以|建议换一道","ratingClass":"good|ok|bad","analysis":"","tastePairing":"","utility":"","calories":"","improvedRecipe":{"name":"","steps":[]},"swapSuggestion":""}}}`;
 
@@ -159,6 +233,8 @@ app.get('/api/health', (req, res) => {
     service: 'jinling-jiugui-api',
     visionModel: VISION_MODEL || null,
     textModel: TEXT_MODEL || null,
+    imageModel: IMAGE_MODEL || null,
+    imageGenAvailable: isImageGenAvailable(),
     missing
   });
 });
@@ -179,7 +255,7 @@ app.post('/api/recognize-wine', async (req, res) => {
         { type: 'image_url', image_url: { url: imageUrl } },
         { type: 'text', text: WINE_PROMPT }
       ]
-    }], 1800);
+    }], 1100, { retries: 2, timeout: 90000 });
     const wine = normalizeWine(extractJSON(content));
     console.log('[识酒] 完成:', wine.wineName);
     res.json({ wine, source: 'ai' });
@@ -198,16 +274,98 @@ app.post('/api/generate-plan', async (req, res) => {
     if (!wine) return res.status(400).json({ error: '缺少 wine' });
 
     console.log('[方案] 调用文本模型:', TEXT_MODEL, '| 酒款:', wine.wineName);
-    const content = await callVolc(TEXT_MODEL, [{
+    const wineCtx = `识酒结果：\n${JSON.stringify(wine, null, 2)}`;
+    let content = await callVolc(TEXT_MODEL, [{
       role: 'user',
-      content: `${PLAN_PROMPT}\n\n识酒结果：\n${JSON.stringify(wine, null, 2)}`
-    }], 3000);
-    const plan = normalizePlan(extractJSON(content));
+      content: `${PLAN_PROMPT}\n\n${wineCtx}`
+    }], 3500);
+    let plan = normalizePlan(extractJSON(content));
+    if (isPureDrinkPlan(plan.cocktail)) {
+      console.log('[方案] 检测到纯饮方案，重试要求特调...');
+      content = await callVolc(TEXT_MODEL, [{
+        role: 'user',
+        content: `${PLAN_PROMPT}\n\n【重要】上次输出过于简单（仅纯饮或材料不足）。必须输出含至少3种材料、4步操作、2种以上辅料的创意特调鸡尾酒，结合下方酒款风味设计。\n\n${wineCtx}`
+      }], 3500);
+      plan = normalizePlan(extractJSON(content));
+    }
     console.log('[方案] 完成:', plan.cocktail.planName);
     res.json({ ...plan, source: 'ai' });
   } catch (error) {
     console.error('生成方案失败:', error.response?.data || error.message);
     res.status(500).json({ error: formatApiError(error) || '生成方案失败' });
+  }
+});
+
+app.post('/api/generate-image', async (req, res) => {
+  try {
+    if (!isImageGenAvailable()) {
+      return res.status(503).json({ error: '未配置生图模型，请在环境变量设置 VOLC_IMAGE_MODEL_ID（火山方舟 Seedream 接入点）' });
+    }
+    const { type, wine, cocktail, dish, prompt } = req.body;
+    let imagePrompt = prompt;
+    if (!imagePrompt) {
+      if (type === 'cocktail' && wine && cocktail) imagePrompt = buildCocktailImagePrompt(wine, cocktail);
+      else if (type === 'dish' && wine && dish) imagePrompt = buildDishImagePrompt(wine, cocktail || {}, dish);
+      else return res.status(400).json({ error: '缺少 type/prompt 或 wine+cocktail/dish' });
+    }
+    console.log('[生图]', type || 'custom', '|', (imagePrompt || '').slice(0, 40));
+    const imageUrl = await generateImage(imagePrompt);
+    res.json({ imageUrl, source: 'ai' });
+  } catch (error) {
+    console.error('生图失败:', error.response?.data || error.message);
+    res.status(500).json({ error: formatApiError(error) || '生图失败' });
+  }
+});
+
+app.post('/api/generate-plan-images', async (req, res) => {
+  try {
+    if (!isImageGenAvailable()) {
+      return res.status(503).json({ error: '未配置生图模型 VOLC_IMAGE_MODEL_ID' });
+    }
+    const { wine, cocktail, tiers } = req.body;
+    if (!wine || !cocktail) return res.status(400).json({ error: '缺少 wine 或 cocktail' });
+
+    const dishList = [];
+    if (tiers && typeof tiers === 'object') {
+      for (const tier of Object.values(tiers)) {
+        for (const dish of tier?.dishes || []) {
+          if (dish?.name && !dishList.some(d => d.name === dish.name)) dishList.push(dish);
+        }
+      }
+    }
+
+    console.log('[生图] 批量 | 调酒 1 张 + 下酒菜', dishList.length, '张');
+    let cocktailImageUrl = null;
+    try {
+      cocktailImageUrl = await generateImage(buildCocktailImagePrompt(wine, cocktail));
+    } catch (e) {
+      console.error('[生图] 调酒图失败:', e.message);
+    }
+
+    const dishResults = await mapWithConcurrency(dishList, async (dish) => {
+      try {
+        const imageUrl = await generateImage(buildDishImagePrompt(wine, cocktail, dish));
+        return { name: dish.name, imageUrl };
+      } catch (e) {
+        console.error('[生图] 菜品失败:', dish.name, e.message);
+        return { name: dish.name, imageUrl: null };
+      }
+    }, 2);
+
+    const dishImages = {};
+    for (const r of dishResults) {
+      if (r?.name && r.imageUrl) dishImages[r.name] = r.imageUrl;
+    }
+
+    res.json({
+      cocktailImageUrl,
+      dishImages,
+      imageModel: IMAGE_MODEL,
+      source: 'ai'
+    });
+  } catch (error) {
+    console.error('批量生图失败:', error.response?.data || error.message);
+    res.status(500).json({ error: formatApiError(error) || '批量生图失败' });
   }
 });
 
@@ -324,6 +482,7 @@ app.listen(PORT, () => {
   console.log(`🔍 健康检查: http://localhost:${PORT}/api/health`);
   console.log(`👁  识酒模型: ${VISION_MODEL || '未配置'}`);
   console.log(`📝 方案模型: ${TEXT_MODEL || '未配置'}`);
+  console.log(`🎨 生图模型: ${IMAGE_MODEL || '未配置'}`);
   if (missing.length) console.log(`⚠️  缺少配置: ${missing.join('、')}`);
   console.log('='.repeat(60));
   console.log('Demo 访问: http://localhost:端口/demo/?api=http://localhost:' + PORT);
