@@ -612,7 +612,7 @@ app.get('/v1/models', async (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   const missing = ensureConfig();
   console.log('\n' + '='.repeat(60));
   console.log('🍷 金灵酒鬼 API 服务已启动');
