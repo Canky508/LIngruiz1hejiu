@@ -399,6 +399,10 @@ let SAMPLES = [];
 const IMG_PATHS = ['assets/', '../ui设计图/images/'];
 
 function detectImgBase() {
+  const parts = location.pathname.split('/').filter(p => p && !/\.html?$/i.test(p));
+  if (parts.length >= 1) {
+    return '/' + parts[0] + '/assets/';
+  }
   return 'assets/';
 }
 
@@ -1009,8 +1013,8 @@ function initIpImages() {
 
 function showIpModal(type, title, message) {
   const imgMap = {
-    error: [IMG.ipErrorTimeout, imgPath('ip-error-timeout.jpg')],
-    age: [IMG.ipAgeWarning, imgPath('ip-age-warning.jpg')]
+    error: [imgPath('ip-error-timeout.jpg'), IMG.ipErrorTimeout],
+    age: [imgPath('ip-age-warning.jpg'), IMG.ipAgeWarning]
   };
   const pair = imgMap[type] || imgMap.error;
   const imgEl = document.getElementById('ipModalImg');
