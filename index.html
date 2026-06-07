@@ -38,27 +38,44 @@
       display: flex; align-items: center; justify-content: center;
     }
     .wine-hero-stage {
-      align-items: flex-end;
+      position: relative;
+      padding: 1.25rem 0.5rem 1rem;
+      overflow: visible;
+      isolation: isolate;
+    }
+    .wine-bottle-wrap {
+      display: flex;
       justify-content: center;
-      gap: 0;
-      padding: 1.25rem 0.5rem 0.75rem;
-      overflow: hidden;
+      align-items: flex-end;
+      min-height: 210px;
+      position: relative;
+      z-index: 10;
     }
-    .wine-hero-stage .cutout-hero {
-      height: 13rem;
-      max-width: 46%;
+    .wine-bottle-wrap .cutout-hero {
+      height: 14rem;
+      max-width: 58%;
       flex-shrink: 0;
     }
-    .wine-ip-guide {
-      height: 13rem;
-      max-width: 46%;
+    .wine-photo-hero {
+      height: 14rem;
+      max-width: 62%;
+      width: auto;
       object-fit: contain;
-      object-position: bottom center;
-      flex-shrink: 0;
-      margin-left: -0.25rem;
-      filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
-      pointer-events: none;
-      user-select: none;
+      border-radius: 14px;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+      background: #fff;
+    }
+    .wine-ip-overlay {
+      position: absolute;
+      right: -0.5rem;
+      bottom: -0.25rem;
+      height: 14.5rem;
+      width: auto;
+      max-width: 54%;
+      z-index: 30;
+      object-fit: contain;
+      object-position: bottom right;
+      filter: drop-shadow(0 14px 28px rgba(0,0,0,0.16)) drop-shadow(0 0 12px rgba(255,255,255,0.35));
     }
     .cutout-hero { object-fit: contain; filter: drop-shadow(0 16px 32px rgba(0,0,0,0.12)); }
     .brand-logo-wrap { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 9999px; background: rgba(255,255,255,0.96); flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); overflow: hidden; }
@@ -161,10 +178,12 @@
         <span class="material-symbols-outlined text-lg">arrow_back</span> 重新识酒
       </button>
 
-      <div class="relative cutout-stage wine-hero-stage rounded-[20px] mb-2 mx-0 min-h-[240px]">
-        <p class="absolute font-serif text-6xl text-black/[0.03] rotate-90 whitespace-nowrap select-none pointer-events-none left-2 top-1/2 -translate-y-1/2" id="wineDecorText">Single Malt</p>
-        <img id="wineBottleImg" src="" alt="酒瓶" class="cutout-hero relative z-10" />
-        <img id="wineIpGuide" src="" alt="灵瑞讲解" class="wine-ip-guide relative z-10" />
+      <div class="cutout-stage wine-hero-stage rounded-[20px] mb-2 mx-0 min-h-[250px]">
+        <p class="absolute font-serif text-6xl text-black/[0.03] rotate-90 whitespace-nowrap select-none pointer-events-none left-2 top-1/2 -translate-y-1/2 z-0" id="wineDecorText">Single Malt</p>
+        <div class="wine-bottle-wrap">
+          <img id="wineBottleImg" src="" alt="酒瓶" class="cutout-hero" />
+        </div>
+        <img id="wineIpGuide" src="" alt="灵瑞评酒" class="ip-float wine-ip-overlay" />
       </div>
 
       <h2 class="font-serif text-2xl text-center text-black leading-tight mb-3" id="wineName">—</h2>
@@ -222,8 +241,8 @@
       <div class="relative w-full cutout-stage rounded-[20px] overflow-hidden mb-5 min-h-[220px] py-6">
         <img id="cocktailHeroImg" src="" alt="调酒方案" class="cutout-hero h-48 max-w-[85%]" />
         <div id="cocktailHeroLoading" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
-          <div class="w-8 h-8 border-2 border-brand-red border-t-transparent rounded-full animate-spin mb-2"></div>
-          <p class="text-xs text-neutral-500">AI 绘制调酒效果图中...</p>
+          <div id="cocktailHeroSpinner" class="w-8 h-8 border-2 border-brand-red border-t-transparent rounded-full animate-spin mb-2"></div>
+          <p class="text-xs text-neutral-500 text-center px-6" id="cocktailHeroLoadingText">AI 绘制调酒效果图中...</p>
         </div>
       </div>
       <p class="font-sans text-sm text-neutral-500 leading-relaxed mb-6" id="flavorNote"></p>
@@ -747,7 +766,7 @@ function scheduleApiKeepAlive() {
 function precompressUploadedImage() {
   if (!uploadedImage) { preparedImageBase64 = null; return; }
   preparedImageBase64 = null;
-  compressImageForApi(uploadedImage, 512, 0.62)
+  compressImageForApi(uploadedImage, 448, 0.58)
     .then(b64 => { preparedImageBase64 = b64; })
     .catch(() => { preparedImageBase64 = null; });
 }
@@ -784,7 +803,7 @@ async function urlToDataUrl(url) {
   });
 }
 
-async function compressImageForApi(src, maxEdge = 512, quality = 0.62) {
+async function compressImageForApi(src, maxEdge = 448, quality = 0.58) {
   const dataUrl = src.startsWith('data:') ? src : await urlToDataUrl(src);
   const img = await loadImageElement(dataUrl);
   let { width, height } = img;
@@ -812,7 +831,7 @@ async function recognizeWithAI(imageBase64) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64 })
-  }, 60000);
+  }, 120000);
   const wineData = await wineRes.json();
   if (!wineRes.ok) throw new Error(wineData.error || '识酒 API 失败');
   return wineData.wine;
@@ -865,9 +884,13 @@ async function generateOneImage(type, extra = {}) {
   return data.imageUrl;
 }
 
-function setCocktailHeroLoading(show) {
+function setCocktailHeroLoading(show, message) {
   const el = document.getElementById('cocktailHeroLoading');
+  const textEl = document.getElementById('cocktailHeroLoadingText');
+  const spinner = document.getElementById('cocktailHeroSpinner');
   if (el) el.classList.toggle('hidden', !show);
+  if (textEl && message) textEl.textContent = message;
+  if (spinner) spinner.classList.toggle('hidden', !!message && message.includes('暂不可用'));
 }
 
 async function generateCocktailImageOnly() {
@@ -881,8 +904,16 @@ async function generateCocktailImageOnly() {
     renderCocktail();
   } catch (err) {
     console.warn('调酒生图失败:', err.message);
+    if (sessionData?.cocktail) sessionData.cocktail._imageGenFailed = true;
+    if (document.getElementById('screen-cocktail')?.classList.contains('active')) renderCocktail();
   } finally {
-    setCocktailHeroLoading(false);
+    if (!sessionData?.cocktail?.imageUrl && sessionData?.cocktail?._imageGenFailed) {
+      setCocktailHeroLoading(true, '调酒效果图暂不可用，请稍后重试');
+    } else if (!sessionData?.cocktail?.imageUrl) {
+      setCocktailHeroLoading(true);
+    } else {
+      setCocktailHeroLoading(false);
+    }
   }
 }
 
@@ -987,7 +1018,7 @@ function getPreviewImageUrl() {
   return getSampleImage(selectedSample || 'whisky');
 }
 
-function getWineCutoutUrl() {
+function getWineAssetCutoutUrl() {
   const cutouts = {
     whisky: IMG.whiskyCutout,
     red: IMG.redCutout,
@@ -1002,6 +1033,17 @@ function getWineCutoutUrl() {
   }
   const sample = selectedSample || 'whisky';
   return cutouts[sample] || cutouts.whisky;
+}
+
+function getWineDisplayImageUrl() {
+  if (uploadedImage) return uploadedImage;
+  if (sessionData?.capturePhoto) return sessionData.capturePhoto;
+  if (sessionData?.aiRecognized && selectedSample) return getSampleImage(selectedSample);
+  return getWineAssetCutoutUrl();
+}
+
+function isWineUserCapture() {
+  return !!(uploadedImage || sessionData?.capturePhoto);
 }
 
 const DISH_IMAGES = {
@@ -1140,8 +1182,11 @@ function navTo(screen) {
   if (['cocktail','food','share'].includes(screen) && !sessionData) {
     alert('请先完成识酒'); return;
   }
-  if (screen === 'cocktail') { renderCocktail(); goTo('cocktail'); }
-  else if (screen === 'food') { renderFood(); goTo('food'); }
+  if (screen === 'cocktail') {
+    renderCocktail();
+    goTo('cocktail');
+    if (sessionData?.aiRecognized && sessionData?.cocktail) generateAndApplyPlanImages();
+  } else if (screen === 'food') { renderFood(); goTo('food'); }
   else if (screen === 'share') { renderShare(); goTo('share'); }
   else if (screen === 'bars') { renderBars(); goTo('bars'); }
   else goTo(screen);
@@ -1275,7 +1320,7 @@ async function runRecognize() {
 
   const shouldUseAI = !!(uploadedImage || useRealAI) || (apiOnline && !!selectedSample);
   const texts = shouldUseAI
-    ? ['正在准备识酒...', '认真看酒标中...', '酒标、酒体颜色分析中...', '快好了，稍等几秒...']
+    ? ['正在准备识酒...', '灵瑞在看酒标...', '提取酒款信息中...', '深度分析口感香气...', '快好了，稍等几秒...']
     : ['加载示例酒款...', '品鉴笔记准备中...'];
   let i = 0;
   loadingTimer = setInterval(() => {
@@ -1299,13 +1344,14 @@ async function runRecognize() {
       const wine = await recognizeWithAI(imageBase64);
       if (recognizeCancelled) return;
 
-      selectedSample = inferSampleIdFromWine(wine);
+      if (!uploadedImage) selectedSample = inferSampleIdFromWine(wine);
       sessionData = {
         wine,
         cocktail: null,
         tiers: null,
         dishAnalysis: MOCK[fallbackKey]?.dishAnalysis || {},
-        aiRecognized: true
+        aiRecognized: true,
+        capturePhoto: uploadedImage || (selectedSample ? getSampleImage(selectedSample) : null)
       };
     } else {
       await new Promise(r => setTimeout(r, 1200));
@@ -1325,16 +1371,32 @@ async function runRecognize() {
   }
 }
 
+function sanitizeDisplayText(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/老金改良版/g, '改良版')
+    .replace(/老金|金叔|听叔一句[，：:]?|叔给你|叔教你|叔认|叔能|听叔的|师傅|给你调的/g, '')
+    .replace(/[，,]{2,}/g, '，')
+    .replace(/^[，,、\s]+/, '')
+    .trim();
+}
+
 function getData() { return sessionData || MOCK[selectedSample || 'whisky']; }
 
 function renderWine() {
   const w = getData().wine;
   const sample = SAMPLES.find(s => s.id === selectedSample);
   const cutoutEl = document.getElementById('wineBottleImg');
-  setLazyImg(cutoutEl, getWineCutoutUrl());
+  const userCapture = isWineUserCapture();
+  cutoutEl.className = userCapture ? 'wine-photo-hero' : 'cutout-hero';
+  setLazyImg(cutoutEl, getWineDisplayImageUrl(), userCapture);
   cutoutEl.alt = w.wineName;
-  const cutoutFiles = { whisky: '麦卡伦.png', red: '红酒.png', baijiu: '白酒.png' };
-  cutoutEl.onerror = function() { imgFallback(this, cutoutFiles[selectedSample] || '麦卡伦.png'); };
+  if (userCapture) {
+    cutoutEl.onerror = null;
+  } else {
+    const cutoutFiles = { whisky: '麦卡伦.png', red: '红酒.png', baijiu: '白酒.png' };
+    cutoutEl.onerror = function() { imgFallback(this, cutoutFiles[selectedSample] || '麦卡伦.png'); };
+  }
   document.getElementById('wineName').textContent = w.wineName;
   document.getElementById('wineDecorText').textContent = w.brand || sample?.decor || 'Wine';
 
@@ -1359,7 +1421,7 @@ function renderWine() {
 
   document.getElementById('priceRange').textContent = `¥${w.referencePrice.min} – ¥${w.referencePrice.max}`;
   document.getElementById('priceNote').textContent = w.referencePrice.note;
-  document.getElementById('bartenderTake').textContent = w.bartenderTake || '这瓶有点意思——颜色、酒标都对得上号，值得细品。';
+  document.getElementById('bartenderTake').textContent = sanitizeDisplayText(w.bartenderTake) || '这瓶有点意思——颜色、酒标都对得上号，值得细品。';
   document.getElementById('tasteSummary').textContent = w.taste.summary;
   const primary = (w.aroma?.primary || []).join('、');
   document.getElementById('aromaSummary').textContent = (w.aroma?.summary || '') + (primary ? `（主香：${primary}）` : '');
@@ -1367,35 +1429,51 @@ function renderWine() {
 }
 
 function renderCocktail() {
-  const c = getData().cocktail;
-  const wineType = getData().wine?.wineType || '';
-  const heroSrc = c.imageUrl
-    || COCKTAIL_HERO[c.planName]
-    || (/威士忌|whisky/i.test(wineType) ? IMG.cocktailAmber : null)
-    || (/红|葡萄酒/i.test(wineType) ? IMG.redCutout : null)
-    || (/白|酱香/i.test(wineType) ? IMG.baijiuCutout : null)
-    || IMG.cocktailAmber;
+  const data = getData();
+  const c = data.cocktail;
+  const aiMode = !!data.aiRecognized;
   const heroEl = document.getElementById('cocktailHeroImg');
-  heroEl.src = heroSrc;
-  heroEl.onerror = function() {
-    if (c.imageUrl && this.src === c.imageUrl) {
+  if (c.imageUrl) {
+    heroEl.classList.remove('hidden');
+    heroEl.src = c.imageUrl;
+    heroEl.onerror = function() {
       c.imageUrl = null;
       renderCocktail();
-      return;
+    };
+    setCocktailHeroLoading(false);
+  } else if (aiMode) {
+    heroEl.classList.add('hidden');
+    heroEl.removeAttribute('src');
+    heroEl.onerror = null;
+    if (c._imageGenFailed) {
+      setCocktailHeroLoading(true, '调酒效果图暂不可用，请稍后重试');
+    } else {
+      setCocktailHeroLoading(true, 'AI 绘制调酒效果图中...');
     }
-    imgFallback(this, '琥珀暖冬.png');
-  };
-  setCocktailHeroLoading(planImagesGenerating && !c.imageUrl);
+  } else {
+    const wineType = data.wine?.wineType || '';
+    const heroSrc = COCKTAIL_HERO[c.planName]
+      || (/威士忌|whisky/i.test(wineType) ? IMG.cocktailAmber : null)
+      || (/红|葡萄酒/i.test(wineType) ? IMG.redCutout : null)
+      || (/白|酱香/i.test(wineType) ? IMG.baijiuCutout : null)
+      || IMG.cocktailAmber;
+    heroEl.classList.remove('hidden');
+    heroEl.src = heroSrc;
+    heroEl.onerror = function() { imgFallback(this, '琥珀暖冬.png'); };
+    setCocktailHeroLoading(false);
+  }
   document.getElementById('planName').textContent = c.planName;
   document.getElementById('planMeta').textContent = `${c.style || '鸡尾酒'} · ${c.difficulty || '入门'} · 约¥${c.totalCost}/杯`;
-  document.getElementById('flavorNote').textContent = (c.planSubtitle ? c.planSubtitle + ' — ' : '') + (c.flavorNote || '');
+  const subtitle = sanitizeDisplayText(c.planSubtitle);
+  const flavor = sanitizeDisplayText(c.flavorNote);
+  document.getElementById('flavorNote').textContent = (subtitle ? subtitle + ' — ' : '') + (flavor || '');
   document.getElementById('totalCost').textContent = `¥${c.totalCost}`;
   document.getElementById('totalCostBar').textContent = `合计约 ¥${c.totalCost}`;
   document.getElementById('materialsList').innerHTML = c.materials.map(m =>
     `<div class="flex justify-between items-center py-3 text-sm"><span><strong>${m.name}</strong> <span class="text-neutral-400">${m.amount}</span></span><span class="text-neutral-500">¥${m.subtotal}</span></div>`
   ).join('');
   document.getElementById('stepsList').innerHTML = c.steps.map((s, i) =>
-    `<li class="flex gap-3 text-sm"><span class="w-7 h-7 rounded-full bg-black text-white text-xs flex items-center justify-center flex-shrink-0">${String(i+1).padStart(2,'0')}</span><span class="text-neutral-700 leading-relaxed pt-1">${s}</span></li>`
+    `<li class="flex gap-3 text-sm"><span class="w-7 h-7 rounded-full bg-black text-white text-xs flex items-center justify-center flex-shrink-0">${String(i+1).padStart(2,'0')}</span><span class="text-neutral-700 leading-relaxed pt-1">${sanitizeDisplayText(s)}</span></li>`
   ).join('');
   document.getElementById('toolsList').innerHTML = c.tools.map(t =>
     `<span class="text-xs bg-neutral-100 px-3 py-2 rounded-2xl">${t}</span>`
@@ -1431,7 +1509,7 @@ function renderDishes() {
       <div class="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center overflow-hidden flex-shrink-0">${thumb}</div>
       <div class="flex-1 min-w-0">
         <p class="font-serif text-base font-semibold mb-1">${d.name}</p>
-        <p class="text-xs text-neutral-500 leading-relaxed">${d.reason}</p>
+        <p class="text-xs text-neutral-500 leading-relaxed">${sanitizeDisplayText(d.reason)}</p>
         <p class="text-[11px] text-neutral-400 mt-2">${d.calories} · ${d.cost}</p>
       </div>
     </div>`;
@@ -1444,7 +1522,7 @@ function renderDishAnalysis(a) {
   const recipe = a.improvedRecipe || { name: '改良版', steps: [] };
   document.getElementById('dishAnalysis').innerHTML = `
     <span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-lg mb-3 ${ratingColors[a.ratingClass] || ratingColors.ok}">${a.rating}</span>
-    <p class="text-sm text-white/90 leading-relaxed mb-3">${a.analysis}</p>
+    <p class="text-sm text-white/90 leading-relaxed mb-3">${sanitizeDisplayText(a.analysis)}</p>
     <div class="space-y-2 text-xs text-white/60">
       <p><strong class="text-white/80">口感搭配</strong> ${a.tastePairing || '—'}</p>
       <p><strong class="text-white/80">效用</strong> ${a.utility || '—'}</p>

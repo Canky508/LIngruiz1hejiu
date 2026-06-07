@@ -20,16 +20,30 @@ const VOLC_HOST = 'ark.cn-beijing.volces.com';
 const VISION_MODEL = process.env.VOLC_VISION_MODEL_ID || process.env.VOLC_MODEL_ID;
 const TEXT_MODEL = process.env.VOLC_TEXT_MODEL_ID || process.env.VOLC_MODEL_ID;
 const IMAGE_MODEL = process.env.VOLC_IMAGE_MODEL_ID || process.env.VOLC_MODEL_ID;
+const IMAGE_SIZE = process.env.VOLC_IMAGE_SIZE || '768x768';
+
+// 方舟平台上的 DeepSeek 深度思考接入点（与 VOLC_API_KEY 共用，ep- 开头）
+const REASON_MODEL = process.env.VOLC_REASON_MODEL_ID || process.env.VOLC_DEEPSEEK_MODEL_ID;
 
 function isImageGenAvailable() {
   return !!(VOLC_API_KEY && IMAGE_MODEL);
+}
+
+function isReasonModelAvailable() {
+  return !!(VOLC_API_KEY && REASON_MODEL);
+}
+
+function isTextGenAvailable() {
+  return isReasonModelAvailable() || !!(VOLC_API_KEY && TEXT_MODEL);
 }
 
 function ensureConfig() {
   const missing = [];
   if (!VOLC_API_KEY) missing.push('VOLC_API_KEY');
   if (!VISION_MODEL) missing.push('VOLC_VISION_MODEL_ID 或 VOLC_MODEL_ID（识酒视觉）');
-  if (!TEXT_MODEL) missing.push('VOLC_TEXT_MODEL_ID 或 VOLC_MODEL_ID（文本方案）');
+  if (!isTextGenAvailable()) {
+    missing.push('VOLC_REASON_MODEL_ID（方舟 DeepSeek 深度思考）或 VOLC_TEXT_MODEL_ID');
+  }
   return missing;
 }
 
@@ -60,7 +74,8 @@ async function callVolc(modelId, messages, maxTokens = 2048, opts = {}) {
         maxBodyLength: Infinity,
         maxContentLength: Infinity
       });
-      return response.data.choices?.[0]?.message?.content ||
+      const msg = response.data.choices?.[0]?.message;
+      return msg?.content || msg?.reasoning_content ||
         response.data.choices?.[0]?.content?.[0]?.text || '';
     } catch (error) {
       lastError = error;
@@ -75,12 +90,22 @@ async function callVolc(modelId, messages, maxTokens = 2048, opts = {}) {
   throw lastError;
 }
 
+async function callReasonModel(messages, maxTokens = 2048, opts = {}) {
+  if (!REASON_MODEL) throw new Error('未配置 VOLC_REASON_MODEL_ID（方舟 DeepSeek 接入点）');
+  return callVolc(REASON_MODEL, messages, maxTokens, { ...opts, retries: opts.retries ?? 2 });
+}
+
+async function callTextModel(messages, maxTokens = 2048, opts = {}) {
+  if (isReasonModelAvailable()) return callReasonModel(messages, maxTokens, opts);
+  return callVolc(TEXT_MODEL, messages, maxTokens, opts);
+}
+
 async function generateImage(prompt) {
   if (!isImageGenAvailable()) throw new Error('未配置生图模型 VOLC_IMAGE_MODEL_ID');
   const response = await axios.post(`https://${VOLC_HOST}/api/v3/images/generations`, {
     model: IMAGE_MODEL,
     prompt: String(prompt).slice(0, 600),
-    size: '768x768',
+    size: IMAGE_SIZE,
     response_format: 'url',
     watermark: false,
     sequential_image_generation: 'disabled'
@@ -123,7 +148,8 @@ function formatApiError(error) {
   if (/overdue balance/i.test(msg)) return '火山引擎账户欠费，请充值后重试';
   if (/does not support multimodal|image_url/i.test(msg)) return '当前模型不支持识图，请配置 VOLC_VISION_MODEL_ID 为多模态接入点';
   if (/authentication|api key|unauthorized/i.test(msg)) return 'API Key 无效，请检查 VOLC_API_KEY';
-  if (/image model|images\/generations|seedream/i.test(msg)) return '生图模型未开通或接入点无效，请配置 VOLC_IMAGE_MODEL_ID（Seedream 文生图）';
+  if (/image model|images\/generations|seedream/i.test(msg)) return '生图模型未开通或接入点无效，请配置 VOLC_IMAGE_MODEL_ID（豆包 Seedream 文生图）';
+  if (/deepseek|reason/i.test(msg)) return '方舟 DeepSeek 调用失败，请检查 VOLC_REASON_MODEL_ID 接入点是否有效';
   return msg || '请求失败';
 }
 
@@ -137,27 +163,90 @@ function parseImageDataUrl(imageBase64) {
   return imageUrl;
 }
 
+const FORBIDDEN_PERSONA_RE = /老金|金叔|听叔|叔给你|叔教你|叔认|叔能|叔一句|师傅|听叔的|给你调的/g;
+
+function sanitizePersonaText(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/老金改良版/g, '改良版')
+    .replace(FORBIDDEN_PERSONA_RE, '')
+    .replace(/[，,]{2,}/g, '，')
+    .replace(/^[，,、\s]+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function sanitizeWine(wine) {
+  const w = { ...wine };
+  if (w.bartenderTake) w.bartenderTake = sanitizePersonaText(w.bartenderTake);
+  if (w.taste?.summary) w.taste.summary = sanitizePersonaText(w.taste.summary);
+  if (w.aroma?.summary) w.aroma.summary = sanitizePersonaText(w.aroma.summary);
+  return w;
+}
+
+function sanitizeDishAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') return analysis;
+  const a = { ...analysis };
+  ['analysis', 'tastePairing', 'utility', 'swapSuggestion'].forEach(k => {
+    if (a[k]) a[k] = sanitizePersonaText(a[k]);
+  });
+  if (a.improvedRecipe?.name) a.improvedRecipe.name = sanitizePersonaText(a.improvedRecipe.name);
+  if (Array.isArray(a.improvedRecipe?.steps)) {
+    a.improvedRecipe.steps = a.improvedRecipe.steps.map(s => sanitizePersonaText(s));
+  }
+  return a;
+}
+
+function sanitizePlan(plan) {
+  const p = JSON.parse(JSON.stringify(plan || {}));
+  const c = p.cocktail || {};
+  ['planSubtitle', 'flavorNote'].forEach(k => { if (c[k]) c[k] = sanitizePersonaText(c[k]); });
+  if (Array.isArray(c.steps)) c.steps = c.steps.map(s => sanitizePersonaText(s));
+  p.cocktail = c;
+  if (p.tiers && typeof p.tiers === 'object') {
+    for (const tier of Object.values(p.tiers)) {
+      for (const dish of tier?.dishes || []) {
+        if (dish.reason) dish.reason = sanitizePersonaText(dish.reason);
+      }
+    }
+  }
+  if (p.dishAnalysis && typeof p.dishAnalysis === 'object') {
+    for (const a of Object.values(p.dishAnalysis)) {
+      if (!a || typeof a !== 'object') continue;
+      ['analysis', 'tastePairing', 'utility', 'swapSuggestion'].forEach(k => {
+        if (a[k]) a[k] = sanitizePersonaText(a[k]);
+      });
+      if (a.improvedRecipe?.name) a.improvedRecipe.name = sanitizePersonaText(a.improvedRecipe.name);
+      if (Array.isArray(a.improvedRecipe?.steps)) {
+        a.improvedRecipe.steps = a.improvedRecipe.steps.map(s => sanitizePersonaText(s));
+      }
+    }
+  }
+  return p;
+}
+
 function normalizeWine(wine) {
+  const cleaned = sanitizeWine(wine);
   return {
-    wineName: wine.wineName || '未识别酒款',
-    wineType: wine.wineType || '',
-    brand: wine.brand || '',
-    origin: wine.origin || '',
-    vintage: wine.vintage || '',
-    abv: wine.abv || '',
-    color: wine.color || '',
-    taste: { summary: wine.taste?.summary || '口感信息生成中', ...wine.taste },
-    aroma: { primary: wine.aroma?.primary || [], summary: wine.aroma?.summary || '', ...wine.aroma },
+    wineName: cleaned.wineName || '未识别酒款',
+    wineType: cleaned.wineType || '',
+    brand: cleaned.brand || '',
+    origin: cleaned.origin || '',
+    vintage: cleaned.vintage || '',
+    abv: cleaned.abv || '',
+    color: cleaned.color || '',
+    taste: { summary: cleaned.taste?.summary || '口感信息生成中', ...cleaned.taste },
+    aroma: { primary: cleaned.aroma?.primary || [], summary: cleaned.aroma?.summary || '', ...cleaned.aroma },
     referencePrice: {
-      min: wine.referencePrice?.min ?? 0,
-      max: wine.referencePrice?.max ?? 0,
-      currency: wine.referencePrice?.currency || 'CNY',
-      note: wine.referencePrice?.note || '国内市场参考区间，仅供参考'
+      min: cleaned.referencePrice?.min ?? 0,
+      max: cleaned.referencePrice?.max ?? 0,
+      currency: cleaned.referencePrice?.currency || 'CNY',
+      note: cleaned.referencePrice?.note || '国内市场参考区间，仅供参考'
     },
-    servingTips: wine.servingTips || '',
-    confidence: wine.confidence || 'medium',
-    visibleEvidence: Array.isArray(wine.visibleEvidence) ? wine.visibleEvidence : [],
-    bartenderTake: wine.bartenderTake || '这瓶有点意思——颜色、酒标都对得上号，先记下了。'
+    servingTips: cleaned.servingTips || '',
+    confidence: cleaned.confidence || 'medium',
+    visibleEvidence: Array.isArray(cleaned.visibleEvidence) ? cleaned.visibleEvidence : [],
+    bartenderTake: cleaned.bartenderTake || '这瓶有点意思——颜色、酒标都对得上号，先记下了。'
   };
 }
 
@@ -178,6 +267,7 @@ function isPureDrinkPlan(cocktail) {
 }
 
 function normalizePlan(plan) {
+  plan = sanitizePlan(plan);
   const cocktail = plan.cocktail || {};
   return {
     cocktail: {
@@ -196,9 +286,23 @@ function normalizePlan(plan) {
   };
 }
 
-const BARTENDER_PERSONA = `你是金灵酒鬼的驻店调酒师：二十多岁的年轻女性，幽默风趣、有点调皮可爱，像吧台边懂酒又会聊天的朋友。说话接地气、好懂，善用比喻和轻巧调侃，鉴别酒款时专业准确。事实字段准确，看不清不编造。个性文案1-3句，先结论后道理。可幽默但不低俗，不嘲讽用户，不鼓励酗酒。禁止自称「老金」「叔」「师傅」或任何固定昵称；不要用第一人称自我称呼，直接点评酒款、给建议即可。`;
+const BARTENDER_PERSONA = `你是金灵酒鬼的驻店调酒师：二十多岁的年轻女性，幽默风趣、有点调皮可爱，像吧台边懂酒又会聊天的闺蜜朋友。说话接地气、好懂，善用比喻和轻巧调侃，鉴别酒款时专业准确。事实字段准确，看不清不编造。个性文案1-3句，先结论后道理。可幽默但不低俗，不嘲讽用户，不鼓励酗酒。
 
-const WINE_PROMPT = `${BARTENDER_PERSONA}
+【口吻硬性要求】
+- 用第三人称或直接点评口吻，如「这杯」「这款」「果香很干净」「趁热喝更顺口」
+- 严禁任何大叔/长辈人设：禁止「老金」「金叔」「叔」「师傅」「听叔的」「叔给你」「给你调的」等
+- 严禁第一人称自我称呼（禁止「我」「咱」「姐姐我」等）
+- 语气像年轻女调酒师，活泼但不油腻`;
+
+const WINE_VISION_PROMPT = `你是酒标视觉识别助手。仅根据照片可见内容提取事实，看不清的字段留空字符串，不编造。模糊则 confidence=low。只输出 JSON，无 markdown：
+{"wineName":"","wineType":"","brand":"","origin":"","vintage":"","abv":"","color":"","confidence":"high|medium|low","visibleEvidence":[]}`;
+
+const WINE_ENRICH_PROMPT = `${BARTENDER_PERSONA}
+
+根据下方识酒事实，撰写品鉴文案。非酒类或信息不足时如实说明，勿编造酒款。只输出 JSON，无 markdown：
+{"taste":{"sweetness":"","acidity":"","tannin":"","body":"","finish":"","summary":""},"aroma":{"primary":[],"secondary":[],"summary":""},"referencePrice":{"min":0,"max":0,"currency":"CNY","note":"国内市场参考区间，仅供参考"},"servingTips":"","bartenderTake":""}`;
+
+const WINE_PROMPT_LEGACY = `${BARTENDER_PERSONA}
 
 分析酒瓶照片，仅据可见内容判断，看不清不编造；模糊则 confidence=low 并提醒补拍。bartenderTake 1-2句俏皮点评（无自我称呼）。只输出 JSON，无 markdown：
 {"wineName":"","wineType":"","brand":"","origin":"","vintage":"","abv":"","color":"","taste":{"sweetness":"","acidity":"","tannin":"","body":"","finish":"","summary":""},"aroma":{"primary":[],"secondary":[],"summary":""},"referencePrice":{"min":0,"max":0,"currency":"CNY","note":"国内市场参考区间，仅供参考"},"servingTips":"","confidence":"high|medium|low","visibleEvidence":[],"bartenderTake":""}`;
@@ -216,7 +320,7 @@ const PLAN_PROMPT = `${BARTENDER_PERSONA}
 - planName 2-6字有画面感，体现调配创意，勿用「纯饮法」「窖香纯饮」等
 - flavorNote 说明辅料如何呼应这款酒的香气/口感，可口语化
 
-配菜 reason 接地气幽默；dishAnalysis 风趣专业。禁止「老金」「叔」「师傅」「听叔的」等任何自我称呼或长辈口吻。
+配菜 reason 接地气幽默；dishAnalysis 风趣专业。全程年轻女调酒师口吻，禁止「老金」「金叔」「叔」「师傅」「听叔的」「给你调的」等长辈或大叔用语。
 请严格只输出一个 JSON 对象，不要 markdown：
 {"cocktail":{"planName":"","planSubtitle":"","style":"","difficulty":"","materials":[{"name":"","amount":"","unitPrice":0,"subtotal":0}],"tools":[],"steps":[],"totalCost":0,"flavorNote":""},"tiers":{"casual":{"label":"平民下酒菜","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"lifestyle":{"label":"精致小生活","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]},"premium":{"label":"高端酒局","dishes":[{"name":"","reason":"","calories":"","cost":"","recipe":[]}]}},"dishAnalysis":{"麻辣小龙虾":{"rating":"强烈推荐|可以|建议换一道","ratingClass":"good|ok|bad","analysis":"","tastePairing":"","utility":"","calories":"","improvedRecipe":{"name":"","steps":[]},"swapSuggestion":""}}}`;
 
@@ -232,9 +336,12 @@ app.get('/api/health', (req, res) => {
     ok: missing.length === 0,
     service: 'jinling-jiugui-api',
     visionModel: VISION_MODEL || null,
-    textModel: TEXT_MODEL || null,
+    reasonModel: REASON_MODEL || null,
+    textModel: isReasonModelAvailable() ? REASON_MODEL : (TEXT_MODEL || null),
+    textProvider: isReasonModelAvailable() ? 'volc-deepseek' : 'volc',
     imageModel: IMAGE_MODEL || null,
     imageGenAvailable: isImageGenAvailable(),
+    recognizePipeline: isReasonModelAvailable() ? 'vision-fast+volc-deepseek' : 'vision-single',
     missing
   });
 });
@@ -248,17 +355,44 @@ app.post('/api/recognize-wine', async (req, res) => {
     if (!imageBase64) return res.status(400).json({ error: '缺少 imageBase64' });
     const imageUrl = parseImageDataUrl(imageBase64);
     const kb = Math.round((imageUrl.split(',')[1]?.length || 0) * 0.75 / 1024);
-    console.log('[识酒] 调用视觉模型:', VISION_MODEL, `| 图片约 ${kb}KB`);
-    const content = await callVolc(VISION_MODEL, [{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: imageUrl } },
-        { type: 'text', text: WINE_PROMPT }
-      ]
-    }], 1100, { retries: 2, timeout: 90000 });
-    const wine = normalizeWine(extractJSON(content));
-    console.log('[识酒] 完成:', wine.wineName);
-    res.json({ wine, source: 'ai' });
+    const t0 = Date.now();
+    let wine;
+
+    if (isReasonModelAvailable()) {
+      console.log('[识酒] 阶段1 视觉快识:', VISION_MODEL, `| 图片约 ${kb}KB`);
+      const visionContent = await callVolc(VISION_MODEL, [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'text', text: WINE_VISION_PROMPT }
+        ]
+      }], 450, { retries: 2, timeout: 55000 });
+      const facts = extractJSON(visionContent);
+      const t1 = Date.now();
+      console.log('[识酒] 阶段1 完成', t1 - t0, 'ms |', facts.wineName || '未识别');
+
+      console.log('[识酒] 阶段2 方舟 DeepSeek 文案:', REASON_MODEL);
+      const enrichContent = await callReasonModel([{
+        role: 'user',
+        content: `${WINE_ENRICH_PROMPT}\n\n识酒事实：\n${JSON.stringify(facts, null, 2)}`
+      }], 1100, { timeout: 90000 });
+      const enriched = extractJSON(enrichContent);
+      wine = normalizeWine({ ...facts, ...enriched });
+      console.log('[识酒] 阶段2 完成', Date.now() - t1, 'ms | 总耗时', Date.now() - t0, 'ms');
+    } else {
+      console.log('[识酒] 单阶段视觉:', VISION_MODEL, `| 图片约 ${kb}KB`);
+      const content = await callVolc(VISION_MODEL, [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageUrl } },
+          { type: 'text', text: WINE_PROMPT_LEGACY }
+        ]
+      }], 1100, { retries: 2, timeout: 90000 });
+      wine = normalizeWine(extractJSON(content));
+      console.log('[识酒] 完成', Date.now() - t0, 'ms |', wine.wineName);
+    }
+
+    res.json({ wine, source: 'ai', pipeline: isReasonModelAvailable() ? 'vision+volc-deepseek' : 'vision' });
   } catch (error) {
     console.error('识酒失败:', error.response?.data || error.message);
     res.status(500).json({ error: formatApiError(error) || '识酒失败，请确认已配置支持视觉的模型接入点' });
@@ -273,19 +407,20 @@ app.post('/api/generate-plan', async (req, res) => {
     const { wine } = req.body;
     if (!wine) return res.status(400).json({ error: '缺少 wine' });
 
-    console.log('[方案] 调用文本模型:', TEXT_MODEL, '| 酒款:', wine.wineName);
+    const textLabel = isReasonModelAvailable() ? `方舟 DeepSeek ${REASON_MODEL}` : TEXT_MODEL;
+    console.log('[方案] 调用文本模型:', textLabel, '| 酒款:', wine.wineName);
     const wineCtx = `识酒结果：\n${JSON.stringify(wine, null, 2)}`;
-    let content = await callVolc(TEXT_MODEL, [{
+    let content = await callTextModel([{
       role: 'user',
       content: `${PLAN_PROMPT}\n\n${wineCtx}`
-    }], 3500);
+    }], 3500, { timeout: 120000 });
     let plan = normalizePlan(extractJSON(content));
     if (isPureDrinkPlan(plan.cocktail)) {
       console.log('[方案] 检测到纯饮方案，重试要求特调...');
-      content = await callVolc(TEXT_MODEL, [{
+      content = await callTextModel([{
         role: 'user',
         content: `${PLAN_PROMPT}\n\n【重要】上次输出过于简单（仅纯饮或材料不足）。必须输出含至少3种材料、4步操作、2种以上辅料的创意特调鸡尾酒，结合下方酒款风味设计。\n\n${wineCtx}`
-      }], 3500);
+      }], 3500, { timeout: 120000 });
       plan = normalizePlan(extractJSON(content));
     }
     console.log('[方案] 完成:', plan.cocktail.planName);
@@ -378,11 +513,11 @@ app.post('/api/analyze-dish', async (req, res) => {
     if (!wine || !dishName) return res.status(400).json({ error: '缺少 wine 或 dishName' });
 
     console.log('[点评] 菜品:', dishName, '| 酒款:', wine.wineName);
-    const content = await callVolc(TEXT_MODEL, [{
+    const content = await callTextModel([{
       role: 'user',
       content: `${DISH_PROMPT}\n\n酒款：${JSON.stringify(wine)}\n调酒方案：${JSON.stringify(cocktail || {})}\n用户想吃的菜：${dishName}`
-    }], 1500);
-    const analysis = extractJSON(content);
+    }], 1500, { timeout: 90000 });
+    const analysis = sanitizeDishAnalysis(extractJSON(content));
     res.json({ dishName, analysis, source: 'ai' });
   } catch (error) {
     console.error('菜品点评失败:', error.response?.data || error.message);
