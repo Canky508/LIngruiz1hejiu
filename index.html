@@ -10,13 +10,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
   <style>
     body { margin: 0; -webkit-font-smoothing: antialiased; background: #171717; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     #app { max-width: 390px; margin: 0 auto; min-height: 100vh; position: relative; overflow: hidden; background: #000; }
     button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     #bottomNav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 390px; z-index: 50; display: flex; justify-content: space-around; align-items: center; height: 5rem; background: rgba(0,0,0,.9); border-top: 1px solid rgba(255,255,255,.1); }
     .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
     .screen { display: none; }
     .screen.active { display: block; }
-    .home-hero { width: 100%; max-width: 320px; height: auto; object-fit: contain; }
+    .home-hero-stage { overflow: hidden; max-width: 320px; width: 100%; background: #000; }
+    .home-hero { width: 112%; max-width: none; height: auto; display: block; margin: -6% 0 0 -6%; object-fit: cover; object-position: 55% 45%; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -44,7 +46,7 @@
     <button type="button" class="text-white/70 hover:text-white" onclick="handleBack()">
       <span class="material-symbols-outlined text-2xl" id="headerLeftIcon">menu</span>
     </button>
-    <h1 class="font-serif text-base tracking-wide text-white/90" id="headerTitle">金灵酒鬼</h1>
+    <h1 class="sr-only" id="headerTitle" aria-hidden="true"></h1>
     <button type="button" class="text-white/70 hover:text-white" onclick="copyShare()">
       <span class="material-symbols-outlined text-2xl" id="headerRightIcon">share</span>
     </button>
@@ -63,11 +65,9 @@
         <p class="font-sans text-sm text-white/60 leading-relaxed">拍一瓶酒，帮你识酒、调酒、配菜、组局</p>
       </section>
 
-      <div class="mb-6 w-full flex justify-center">
+      <div class="mb-6 w-full flex justify-center home-hero-stage">
         <img id="homeHeroImg" alt="灵瑞在喝酒" class="home-hero" src="" />
       </div>
-
-      <p id="recognizeMode" class="mb-2 text-xs text-emerald-400/80 hidden"></p>
 
       <div class="mt-6 flex gap-3 w-full max-w-[300px]">
         <button type="button" onclick="openCamera()" class="flex-1 bg-white text-black py-3 rounded-full font-sans text-sm font-semibold active:scale-95 transition-transform">拍照识酒</button>
@@ -284,25 +284,8 @@
       <h2 class="font-serif text-3xl text-black text-center mb-1">附近酒馆</h2>
       <p class="font-sans text-sm text-neutral-500 text-center mb-5">不想在家调？帮你找合适的店</p>
 
-      <div class="bg-neutral-100 rounded-xl h-11 px-3.5 flex items-center justify-between mb-4 text-sm">
-        <span class="flex items-center gap-2 text-neutral-500">
-          <span class="material-symbols-outlined text-base text-black">location_on</span> 基于当前位置
-        </span>
-        <button type="button" class="text-brand-red text-xs font-medium">刷新</button>
-      </div>
-
-      <div class="h-[100px] rounded-2xl bg-white border border-neutral-100 mb-4 relative overflow-hidden">
-        <svg class="absolute inset-0 w-full h-full text-neutral-200" viewBox="0 0 320 100" preserveAspectRatio="none">
-          <path d="M0 50 H320 M40 0 V100 M120 20 H280 M200 60 H320" stroke="currentColor" stroke-width="1" fill="none"/>
-          <path d="M80 30 Q160 70 240 40" stroke="currentColor" stroke-width="1" fill="none"/>
-        </svg>
-        <div class="absolute w-2.5 h-2.5 bg-brand-red rounded-full top-7 left-10"></div>
-        <div class="absolute w-2.5 h-2.5 bg-brand-red rounded-full top-12 right-14"></div>
-        <div class="absolute w-2.5 h-2.5 bg-brand-red rounded-full bottom-7 left-1/2"></div>
-      </div>
-
       <div id="barsList" class="space-y-3.5"></div>
-      <p class="text-[11px] text-neutral-400 text-center mt-6">Demo 数据 · 正式版接入真实地图</p>
+      <p class="text-[11px] text-neutral-400 text-center mt-6">Demo 数据 · 正式版接入真实酒馆推荐</p>
     </div>
 
     <div class="sticky-cta px-5">
@@ -604,7 +587,7 @@ async function resolveApiBase() {
 async function checkApiHealth() {
   try {
     await resolveApiBase();
-    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(4000) });
+    const res = await fetch(`${API_BASE}/api/health`, { signal: fetchTimeout(20000) });
     const data = await res.json();
     apiOnline = res.ok && data.ok;
     return data;
@@ -634,23 +617,7 @@ async function warmupApi() {
   }
 }
 
-function updateApiStatus(extra) {
-  const el = document.getElementById('recognizeMode');
-  if (!el) return;
-  if (extra) {
-    el.textContent = extra;
-    el.classList.remove('hidden');
-    return;
-  }
-  if (apiOnline) {
-    el.textContent = '✓ AI 识酒服务已连接，拍照或选示例均可真实识别';
-    el.className = 'mt-2 text-xs text-emerald-400/80';
-  } else {
-    el.textContent = '○ AI 未连接，将使用示例数据（启动 volcengine-api 后刷新）';
-    el.className = 'mt-2 text-xs text-amber-400/80';
-  }
-  el.classList.remove('hidden');
-}
+function updateApiStatus() {}
 
 function inferSampleIdFromWine(wine) {
   const t = `${wine?.wineType || ''} ${wine?.wineName || ''} ${wine?.brand || ''}`;
@@ -752,8 +719,6 @@ async function init() {
   document.getElementById('albumInput').onchange = handleImageFile;
   updateChrome('upload');
   await checkApiHealth();
-  const def = SAMPLES.find(s => s.id === selectedSample);
-  if (def) updateApiStatus(apiOnline ? `✓ 已选示例：${def.name} · AI 已连接` : `✓ 已选示例：${def.name} · 离线 Mock`);
 }
 
 function getSampleImage(id) {
@@ -798,8 +763,7 @@ function updateChrome(screen) {
 
   app.className = `w-full max-w-[390px] min-h-screen relative shadow-2xl overflow-hidden ${isDark ? 'bg-black' : 'bg-white'}`;
   header.className = `sticky top-0 z-50 flex justify-between items-center px-5 py-4 backdrop-blur border-b ${isDark ? 'bg-black/95 border-white/5' : 'bg-white/95 border-neutral-100'}`;
-  document.getElementById('headerTitle').textContent = '金灵酒鬼';
-  document.getElementById('headerTitle').className = `font-serif text-base tracking-wide ${isDark ? 'text-white/90' : 'text-black/80'}`;
+  document.getElementById('headerTitle').textContent = '';
   document.getElementById('headerLeftIcon').textContent = screen === 'upload' ? 'menu' : 'arrow_back';
   document.getElementById('headerRightIcon').textContent = screen === 'upload' ? 'account_circle' : 'share';
   document.getElementById('headerLeftIcon').parentElement.className = isDark ? 'text-white/70 hover:text-white' : 'text-black/50 hover:text-black';
@@ -861,11 +825,10 @@ function handleImageFile(e) {
     uploadedImage = ev.target.result;
     showScannerPreview(uploadedImage, 'upload');
     useRealAI = true;
-    updateApiStatus(apiOnline ? '✓ 已选照片，将调用 AI 识酒' : '✓ 已选照片，但 AI 未连接将用 Mock');
     if (pendingRecognizeAfterPhoto) {
       pendingRecognizeAfterPhoto = false;
-      runRecognize();
     }
+    runRecognize();
   };
   reader.readAsDataURL(file);
   e.target.value = '';
@@ -905,7 +868,6 @@ function selectSample(id) {
   uploadedImage = null;
   showScannerPreview(getSampleImage(id), 'sample');
   const name = SAMPLES.find(s => s.id === id).name;
-  updateApiStatus(apiOnline ? `✓ 已选示例：${name} · 将调用 AI 识酒` : `✓ 已选示例：${name} · 离线 Mock`);
   renderSamples();
 }
 
@@ -961,8 +923,12 @@ async function runRecognize() {
   if (!uploadedImage && !selectedSample) { alert('请先拍照或选择示例酒款'); return; }
 
   recognizeCancelled = false;
-  const shouldUseAI = apiOnline && (uploadedImage || useRealAI || selectedSample);
   showScreen('loading');
+  document.getElementById('loadingText').textContent = '正在连接 AI 服务...';
+  await resolveApiBase();
+  await warmupApi();
+
+  const shouldUseAI = !!(uploadedImage || useRealAI) || (apiOnline && !!selectedSample);
   const texts = shouldUseAI
     ? ['正在连接 AI 服务...', '认真看酒标中...', '酒标、酒体颜色分析中...', '口感气味心里有数了...']
     : ['加载示例酒款...', '品鉴笔记准备中...'];
@@ -979,11 +945,7 @@ async function runRecognize() {
   const fallbackKey = selectedSample || 'whisky';
   try {
     if (shouldUseAI) {
-      await resolveApiBase();
-      document.getElementById('loadingText').textContent = '正在连接 AI 服务...';
-      await warmupApi();
       if (recognizeCancelled) return;
-
       document.getElementById('loadingText').textContent = '正在读取图片...';
       const imageBase64 = await getImageForRecognition();
       if (recognizeCancelled) return;
@@ -1224,7 +1186,6 @@ function finishDemo() {
   useRealAI = false;
   renderSamples();
   showScannerPreview(getSampleImage('whisky'), 'sample');
-  document.getElementById('recognizeMode').classList.add('hidden');
   goTo('upload');
 }
 
