@@ -63,7 +63,7 @@
     .cutout-hero { object-fit: contain; filter: drop-shadow(0 16px 32px rgba(0,0,0,0.12)); }
     .brand-logo { width: 2.25rem; height: 2.25rem; border-radius: 9999px; object-fit: cover; flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.2); }
     .brand-logo.on-light { border-color: rgba(0,0,0,0.08); }
-    .ip-float { position: absolute; pointer-events: none; user-select: none; z-index: 15; object-fit: contain; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.12)); }
+    .ip-float { position: absolute; pointer-events: none; user-select: none; z-index: 15; object-fit: contain; object-position: bottom center; background: transparent; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.12)); }
     .ip-cocktail { right: -0.25rem; top: -5.5rem; height: 7.5rem; width: auto; max-width: 44%; }
     .ip-food-tray { right: -0.5rem; top: -1.5rem; height: 7rem; width: auto; max-width: 40%; }
     .ip-dish-review { right: -0.75rem; bottom: -1rem; height: 7.5rem; width: auto; max-width: 42%; }
@@ -977,26 +977,44 @@ function getDishAssetKey(name) {
 function showScannerPreview() {}
 
 const IP_BINDINGS = [
-  ['wineIpGuide', 'ipWineGuide'],
-  ['ipCocktailShake', 'ipCocktailShake'],
-  ['ipFoodTray', 'ipFoodTray'],
-  ['ipDishReview', 'ipDishReview'],
-  ['ipPartyShare', 'ipPartyShare'],
-  ['ipBarsMap', 'ipBarsMap'],
-  ['brandLogo', 'ipAvatarLogo']
+  ['wineIpGuide', 'ipWineGuide', 'ip-wine-guide.jpg'],
+  ['ipCocktailShake', 'ipCocktailShake', 'ip-cocktail-shake.jpg'],
+  ['ipFoodTray', 'ipFoodTray', 'ip-food-tray.jpg'],
+  ['ipDishReview', 'ipDishReview', 'ip-dish-review.jpg'],
+  ['ipPartyShare', 'ipPartyShare', 'ip-party-share.jpg'],
+  ['ipBarsMap', 'ipBarsMap', 'ip-bars-map.jpg'],
+  ['brandLogo', 'ipAvatarLogo', 'ip-avatar-logo.jpg']
 ];
 
+function setIpImg(el, src, jpgFallback, eager = false) {
+  if (!el || !src) return;
+  el.loading = eager ? 'eager' : 'lazy';
+  el.decoding = 'async';
+  el.dataset.fb = '';
+  el.onerror = function() {
+    if (this.dataset.fb !== '1' && jpgFallback) {
+      this.dataset.fb = '1';
+      this.src = jpgFallback;
+    }
+  };
+  el.src = src;
+}
+
 function initIpImages() {
-  IP_BINDINGS.forEach(([id, key]) => {
+  IP_BINDINGS.forEach(([id, key, jpg]) => {
     const el = document.getElementById(id);
-    if (el && IMG[key]) setLazyImg(el, IMG[key]);
+    if (el && IMG[key]) setIpImg(el, IMG[key], imgPath(jpg), id === 'brandLogo');
   });
 }
 
 function showIpModal(type, title, message) {
-  const imgMap = { error: IMG.ipErrorTimeout, age: IMG.ipAgeWarning };
+  const imgMap = {
+    error: [IMG.ipErrorTimeout, imgPath('ip-error-timeout.jpg')],
+    age: [IMG.ipAgeWarning, imgPath('ip-age-warning.jpg')]
+  };
+  const pair = imgMap[type] || imgMap.error;
   const imgEl = document.getElementById('ipModalImg');
-  if (imgEl) imgEl.src = imgMap[type] || IMG.ipErrorTimeout || '';
+  if (imgEl) setIpImg(imgEl, pair[0], pair[1], true);
   document.getElementById('ipModalTitle').textContent = title;
   document.getElementById('ipModalMessage').textContent = message;
   document.getElementById('ipModalOverlay').classList.remove('hidden');
